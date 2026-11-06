@@ -323,17 +323,12 @@ const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
-// 品牌标识：静止的四方块；生成时同一组方块以折叠动画出现在状态行（ActivityMark）。
+// 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
 const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 用户已确认的单枚折叠标识：沿用示例的形变轨迹和 5.6 秒节奏；不由 token 更新驱动。
+// 生成中状态标识（叠影方块）：三层半透明方块以不同速度、方向错位旋转，叠出不断变化的层次；不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
-  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [
-    h('span', { class: 'activity-scale' }, [h('span', { class: 'activity-form' }, [
-      ...['a', 'b', 'c', 'd'].map(part => h('i', { class: `activity-fold activity-fold-${part}` })),
-      h('i', { class: 'activity-core' }),
-    ])]),
-  ]),
+  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, ['a', 'b', 'c'].map(part => h('i', { class: `activity-layer activity-layer-${part}` }))),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -2432,14 +2427,10 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 
 /* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
 :deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; animation: mark-in .42s cubic-bezier(.34,1.56,.64,1) backwards; }
-:deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.5555556); transform-origin: top left; }
-:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; will-change: transform; animation: vds-whole-turn 4.2s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-fold) { position: absolute; left: 9.5px; top: 9.5px; width: 13px; height: 13px; border-radius: 4px; background: var(--blue); will-change: transform; animation-duration: 4.2s; animation-timing-function: cubic-bezier(.45,0,.55,1); animation-iteration-count: infinite; }
-:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-7.5px,-7.5px); }
-:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(7.5px,-7.5px); background: #6e9fff; }
-:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(7.5px,7.5px); background: #4583ff; }
-:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-7.5px,7.5px); }
-:deep(.activity-core) { position: absolute; inset: 10px; border-radius: 4px; background: var(--blue); transform: scale(0); animation: vds-core 4.2s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer) { position: absolute; inset: 4px; border-radius: 3.5px; background: var(--blue); will-change: transform; }
+:deep(.activity-layer-a) { opacity: .4; animation: vds-layer-a 4.8s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer-b) { opacity: .55; animation: vds-layer-b 2.4s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer-c) { inset: 6px; border-radius: 3px; animation: vds-layer-c 4.8s cubic-bezier(.45,0,.55,1) infinite; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2629,24 +2620,18 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-whole-turn{0%{transform:rotate(0deg) scale(.88)}25%{transform:rotate(90deg) scale(.92)}50%{transform:rotate(180deg) scale(.8)}75%{transform:rotate(270deg) scale(.91)}100%{transform:rotate(360deg) scale(.88)}}
-@keyframes vds-fold-a{0%,100%{transform:translate(-7.5px,-7.5px) rotate(0deg)}25%{transform:translate(0,-9px) rotate(45deg) scale(.94)}50%{transform:translate(-2px,-2px) rotate(0deg) scale(1.3)}75%{transform:translate(-8px,-4px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-b{0%,100%{transform:translate(7.5px,-7.5px) rotate(0deg)}25%{transform:translate(9px,0) rotate(45deg) scale(.94)}50%{transform:translate(2px,-2px) rotate(0deg) scale(1.3)}75%{transform:translate(4px,-8px) rotate(25deg) scaleY(.82)}}
-@keyframes vds-fold-c{0%,100%{transform:translate(7.5px,7.5px) rotate(0deg)}25%{transform:translate(0,9px) rotate(45deg) scale(.94)}50%{transform:translate(2px,2px) rotate(0deg) scale(1.3)}75%{transform:translate(8px,4px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-d{0%,100%{transform:translate(-7.5px,7.5px) rotate(0deg)}25%{transform:translate(-9px,0) rotate(45deg) scale(.94)}50%{transform:translate(-2px,2px) rotate(0deg) scale(1.3)}75%{transform:translate(-4px,8px) rotate(25deg) scaleY(.82)}}
-@keyframes vds-core{0%,100%{transform:scale(0)}25%{transform:scale(.8) rotate(45deg)}50%{transform:scale(1)}75%{transform:scale(.55) rotate(25deg)}}
+@keyframes vds-layer-a{0%{transform:rotate(0deg) scale(1.1)}50%{transform:rotate(180deg) scale(.86)}100%{transform:rotate(360deg) scale(1.1)}}
+@keyframes vds-layer-b{0%{transform:rotate(45deg) scale(.9)}50%{transform:rotate(-45deg) scale(1.12)}100%{transform:rotate(-135deg) scale(.9)}}
+@keyframes vds-layer-c{0%,100%{transform:rotate(0deg) scale(1);border-radius:3px}25%{transform:rotate(-90deg) scale(.7);border-radius:50%}50%{transform:rotate(-180deg) scale(1);border-radius:3px}75%{transform:rotate(-270deg) scale(.7);border-radius:50%}}
 @keyframes mark-in{from{opacity:0;transform:scale(.4) rotate(-45deg)}to{opacity:1;transform:none}}
 
 /* 减少动态：关闭其余动效与文字光标；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   :deep(.stream-cursor) { display: none !important; }
-  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-core) { animation: vds-core 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-a) { animation: vds-layer-a 4.8s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-b) { animation: vds-layer-b 2.4s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-c) { animation: vds-layer-c 4.8s cubic-bezier(.45,0,.55,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
