@@ -6,6 +6,7 @@
         :model-value="drawerOpen" @update:model-value="drawerOpen = $event" @opened="onHistoryDrawerOpened" @closed="historySearchPending = false">
         <div class="history-content">
         <div class="history-brand">
+          <span class="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
           <h1>{{ t('AIAGENT.BRAND') }}</h1>
           <el-tooltip :content="t('AIAGENT.HISTORY.TOGGLE')"><button class="panel-toggle" type="button"
             :aria-label="t('AIAGENT.HISTORY.TOGGLE')" :aria-expanded="true" @click="toggleSidebar"><el-icon><Fold /></el-icon></button></el-tooltip>
@@ -13,7 +14,7 @@
         <el-button class="history-new" :icon="Plus" @click="newConversation">{{ t('AIAGENT.HISTORY.NEW') }}</el-button>
         <div class="history-search"><el-input ref="historySearchRef" v-model="historyQuery" clearable :prefix-icon="Search" :placeholder="t('CM.COMMON.SEARCH')" :aria-label="`${t('AIAGENT.HISTORY.TITLE')} · ${t('CM.COMMON.SEARCH')}`" @keydown.esc.stop="historyQuery = ''" /></div>
         <el-scrollbar class="history-scroll">
-          <el-empty v-if="!filteredHistory.length" :image-size="48" :description="t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY')" />
+          <div v-if="!filteredHistory.length" class="history-empty"><span class="history-empty-icon" aria-hidden="true"><el-icon><component :is="historyQuery.trim() ? Search : ChatLineRound" /></el-icon></span><p>{{ t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY') }}</p></div>
           <template v-if="pinned.length">
             <div class="history-heading"><span><el-icon><StarFilled /></el-icon>{{ t('AIAGENT.HISTORY.FAVORITES') }}</span><span class="count">{{ pinned.length }}</span></div>
             <div v-for="chat in pinned" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId }">
@@ -63,10 +64,17 @@
         <div class="chat-scroll-area">
           <el-scrollbar ref="scrollRef" class="message-scroll" :class="{ 'message-scroll--welcome': !messages.length }" @scroll="onScroll">
             <div v-if="!messages.length" class="welcome">
-              <!-- 起始页只保留可操作的预制问题；不再重复品牌、标题、说明和装饰。 -->
+              <!-- 起始页：一句欢迎语 + 三张示例卡片；复用既有 WELCOME / EXAMPLE 语言包键，不新增键。 -->
+              <div class="welcome-hero">
+                <span class="hero-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+                <h2 class="welcome-title">{{ t('AIAGENT.WELCOME.TITLE') }}</h2>
+                <p class="welcome-tip">{{ t('AIAGENT.WELCOME.TIP') }}</p>
+              </div>
               <div class="suggestions">
-                <button v-for="key in ['ONE', 'TWO', 'THREE']" :key="key" type="button" class="suggestion" :title="t(`AIAGENT.EXAMPLE.${key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${key}.PROMPT`))">
-                  {{ t(`AIAGENT.EXAMPLE.${key}.DESCRIPTION`) }}
+                <button v-for="(example, index) in welcomeExamples" :key="example.key" type="button" class="suggestion" :style="{ '--i': index }" :title="t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`))">
+                  <span class="suggestion-icon" :class="`tone-${index}`" aria-hidden="true"><el-icon><component :is="example.icon" /></el-icon></span>
+                  <span class="suggestion-text"><strong>{{ t(`AIAGENT.EXAMPLE.${example.key}.TITLE`) }}</strong><span>{{ t(`AIAGENT.EXAMPLE.${example.key}.DESCRIPTION`) }}</span></span>
+                  <el-icon class="suggestion-arrow" aria-hidden="true"><Right /></el-icon>
                 </button>
               </div>
             </div>
@@ -168,7 +176,7 @@
                                 <thead><tr><th v-for="(head, hi) in item.chart.table_data.headers" :key="hi">{{ head }}</th></tr></thead>
                                 <tbody>
                                   <tr v-for="(row, ri) in item.chart.table_data.rows" :key="ri">
-                                    <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                                    <td v-for="(cell, ci) in row" :key="ci" :class="{ num: typeof cell === 'number' }">{{ typeof cell === 'number' ? cell.toLocaleString() : cell }}</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -245,7 +253,7 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElButton, ElInput, ElIcon, ElTooltip, ElEmpty, ElScrollbar, ElDrawer, ElDialog, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
-import { ArrowDown, ArrowRight, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, Fold, InfoFilled, Loading, Operation, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
+import { ArrowDown, ArrowRight, ChatLineRound, Grid, Histogram, Right, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, Fold, InfoFilled, Loading, Operation, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
 import { merge, cloneDeep } from 'lodash-es';
@@ -1055,6 +1063,8 @@ const attachmentCopy = computed(() => locale.value.toLowerCase().startsWith('zh'
   countError: `Add up to ${MAX_ATTACHMENTS} files per question.`,
 });
 const attachmentHint = computed(() => attachmentCopy.value.formats);
+// 起始页示例卡片：顺序与语言包键对应，图标仅作展示。
+const welcomeExamples = [{ key: 'ONE', icon: Histogram }, { key: 'TWO', icon: TrendCharts }, { key: 'THREE', icon: Grid }];
 function removeAttachment(id: string) { current.value.attachments = draftAttachments.value.filter(file => file.id !== id); scheduleSave(); }
 async function addAttachments(files: File[]) {
   const chat = current.value;
@@ -1580,6 +1590,48 @@ function scatterMerge(chartData: ChartContent): Record<string, unknown> {
   }
   return merge(cloneDeep(scatterOption), option);
 }
+// 展示层图表主题：只在 dealChart 结果上叠加视觉样式，不改变数据、系列与坐标含义。
+// 卡片标题已显示图表名，画布内标题仅在下载 PNG 时临时显示。
+const chartPalette = ['#3b6cff', '#14b8a6', '#f59e0b', '#f0627a', '#8b5cf6', '#0ea5e9', '#64748b', '#d97757'];
+const hexAlpha = (hex: string, alpha: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`; };
+const vGradient = (from: string, to: string) => ({ type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }] });
+const asArray = <T,>(value: T | T[] | undefined): T[] => (value == null ? [] : Array.isArray(value) ? value : [value]);
+function polishChartOption(option: Record<string, unknown>, type: ChartType) {
+  const muted = '#8a93a3';
+  option.color = chartPalette;
+  option.textStyle = { fontFamily: 'PingFang SC, HarmonyOS Sans SC, Huawei Sans, Microsoft YaHei, Arial, sans-serif', color: '#5b6576' };
+  option.title = merge(cloneDeep(option.title ?? {}), { show: false, top: 4, textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2633' } });
+  option.tooltip = merge(cloneDeep(option.tooltip ?? {}), {
+    backgroundColor: 'rgba(255,255,255,0.97)', borderColor: '#e6eaf2', borderWidth: 1, padding: [10, 14],
+    textStyle: { color: '#1f2633', fontSize: 12 }, extraCssText: 'border-radius:12px;box-shadow:0 12px 32px rgba(31,45,80,.14);',
+    axisPointer: type === 'bar' || type === 'multi-bar' ? { type: 'shadow', shadowStyle: { color: 'rgba(59,108,255,0.06)' } } : { type: 'line', lineStyle: { color: '#c9d4ea', type: 'dashed' } },
+  });
+  const series = asArray(option.series as Record<string, unknown>[]);
+  option.legend = merge(cloneDeep(option.legend ?? {}), { show: type === 'pie' || type === 'ring' || series.length > 1, icon: 'roundRect', itemWidth: 10, itemHeight: 10, itemGap: 18, bottom: 0, textStyle: { color: '#5b6576', fontSize: 12 } });
+  if (option.xAxis) {
+    const axisStyle = { axisLine: { lineStyle: { color: '#e3e8f0' } }, axisTick: { show: false }, axisLabel: { color: muted, margin: 12 }, nameTextStyle: { color: muted }, splitLine: { lineStyle: { color: '#eef1f6', type: 'dashed' } } };
+    option.xAxis = asArray(option.xAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), axisStyle, axis.type === 'value' ? {} : { splitLine: { show: false } }));
+    option.yAxis = asArray(option.yAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), axisStyle, { axisLine: { show: false } }));
+    const grid = (option.grid ?? {}) as Record<string, unknown>;
+    option.grid = { ...grid, top: 40, left: 8, right: 24, bottom: (option.legend as Record<string, unknown>).show ? 40 : 8, containLabel: true };
+    if (option.dataZoom) option.grid = { ...(option.grid as Record<string, unknown>), bottom: 64 };
+  }
+  series.forEach((item, index) => {
+    const color = chartPalette[index % chartPalette.length];
+    if (item.type === 'line') {
+      const points = asArray(item.data as unknown[]).length;
+      merge(item, { smooth: 0.35, symbol: 'circle', symbolSize: 8, showSymbol: points <= 24, lineStyle: { width: 3, color, shadowColor: hexAlpha(color, 0.25), shadowBlur: 10, shadowOffsetY: 6 }, itemStyle: { color, borderColor: '#fff', borderWidth: 2 }, emphasis: { focus: 'series', scale: 1.6 } });
+      if (series.length <= 2) item.areaStyle = { color: vGradient(hexAlpha(color, 0.22), hexAlpha(color, 0)) };
+    } else if (item.type === 'bar' || item.type === 'multi-bar') {
+      merge(item, { type: 'bar', barMaxWidth: series.length > 1 ? 22 : 40, itemStyle: { borderRadius: [6, 6, 2, 2], color: vGradient(color, hexAlpha(color, 0.55)) }, emphasis: { focus: 'series', itemStyle: { color } } });
+    } else if (item.type === 'pie') {
+      merge(item, { radius: type === 'ring' ? ['46%', '66%'] : ['0%', '64%'], center: ['50%', '46%'], itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: type === 'ring' ? 6 : 4 }, label: { color: '#4b5565', fontSize: 12 }, labelLine: { smooth: true, lineStyle: { color: '#cbd3e1' } }, emphasis: { scaleSize: 6, itemStyle: { shadowBlur: 16, shadowColor: 'rgba(31,45,80,0.18)' } } });
+    } else if (item.type === 'scatter') {
+      merge(item, { itemStyle: { color: hexAlpha(color, 0.75), borderColor: '#fff', borderWidth: 1 } });
+    }
+  });
+  return option;
+}
 // 单个图表用独立组件管理 echarts 实例:onMounted init、onUnmounted dispose、ResizeObserver 自适应。
 // 不在 v-for 里用内联函数 ref(每次渲染都会重建闭包,会被 Vue 当作 ref 变化反复 dispose/re-init,图表画不出来)。
 const ChartView = defineComponent({
@@ -1599,8 +1651,8 @@ const ChartView = defineComponent({
       if (option) {
         // 展示层统一图表字体/颜色；减少动态时关闭 ECharts 自带插值动画。
         option.animation = !reducedMotion.value;
-        option.color = seriesColors;
-        option.textStyle = { fontFamily: 'Huawei Sans, Manrope, Arial, Microsoft YaHei, sans-serif', color: '#58616f' };
+        option.animationDuration = 700; option.animationEasing = 'cubicOut';
+        polishChartOption(option, props.content.chart_type);
         inst.setOption(option, true);
       }
     };
@@ -1614,7 +1666,18 @@ const ChartView = defineComponent({
     onUnmounted(() => { observer?.disconnect(); inst?.dispose(); inst = undefined; });
     watch(() => [props.content, reducedMotion.value], render, { flush: 'post' });
     // 供下载按钮取 getDataURL；实例销毁后回落为空，避免抛错。
-    expose({ getDataURL: (opts?: Record<string, unknown>) => { try { return inst?.getDataURL(opts as never) ?? ''; } catch { return ''; } } });
+    // 下载时临时显示画布标题并留出顶部空间，导出后恢复屏幕样式。
+    expose({ getDataURL: (opts?: Record<string, unknown>) => {
+      try {
+        if (!inst) return '';
+        const current = inst.getOption() as { grid?: { top?: unknown }[] };
+        const gridTop = current.grid?.[0]?.top;
+        inst.setOption({ animation: false, title: { show: true }, ...(current.grid?.length ? { grid: { top: 64 } } : {}) });
+        const url = inst.getDataURL(opts as never);
+        inst.setOption({ animation: !reducedMotion.value, title: { show: false }, ...(current.grid?.length ? { grid: { top: gridTop } } : {}) });
+        return url;
+      } catch { return ''; }
+    } });
     return () => isEmpty.value
       ? h('div', { class: 'chart-container is-empty' }, [h('p', { class: 'chart-empty' }, t('AIAGENT.CHART.NO_DATA'))])
       : h('div', { ref: root, class: 'chart-container' });
@@ -2319,6 +2382,237 @@ onUnmounted(() => {
 .composer-editing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .composer-editing > span { display: inline-flex; align-items: center; gap: 7px; }
 @media (pointer: coarse) { .question-actions .utility-button, .message-actions .utility-button { min-width: 44px; height: 44px; }.panel-handle { width: 44px; height: 44px; } }
+
+/* ===================== 视觉升级层（2026-11-06） =====================
+   只叠加展示样式：统一色彩与层次、柔和阴影、起始页欢迎区、微交互。
+   不改变结构语义、事件与数据流；减少动态偏好下所有新增动效自动关闭。 */
+.agent-page, .history-panel {
+  --blue: #3b6cff; --blue-strong: #2f5bf0; --blue-soft: #eef3ff; --violet: #7c5cff;
+  --ink: #1f2633; --ink-2: #3c4657; --muted: #7a8495; --line: #e7ebf2; --line-strong: #dbe2ee;
+  --surface-soft: #f6f8fc; --hover: #eef2f8; --running: #3b6cff;
+  --radius-container: 18px; --radius-card: 14px; --radius-control: 10px;
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.04);
+  --shadow-md: 0 1px 2px rgba(16,24,40,.04), 0 10px 28px -8px rgba(31,45,80,.12);
+  --shadow-lg: 0 2px 6px rgba(16,24,40,.04), 0 24px 48px -16px rgba(31,45,80,.18);
+  --ease-out: cubic-bezier(.22,1,.36,1);
+  --content-width: 920px;
+  --el-color-primary: #3b6cff;
+  --el-font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Huawei Sans', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+.agent-page ::selection { background: rgba(59,108,255,.18); }
+
+/* 侧栏：浅色渐变底 + 品牌标识 + 主按钮 */
+.history-panel { width: 272px; flex-basis: 272px; background: linear-gradient(180deg, #f7f9fd 0%, #f3f6fb 100%); border-right-color: var(--line); }
+.history-brand { gap: 10px; padding: 22px 16px 18px 18px; }
+.history-brand h1 { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+.brand-mark, .hero-mark { position: relative; display: grid; grid-template-columns: 1fr 1fr; flex-shrink: 0; background: linear-gradient(135deg, #3b6cff 0%, #6a5cff 100%); box-shadow: 0 6px 14px -6px rgba(59,108,255,.7), inset 0 1px 0 rgba(255,255,255,.25); }
+.brand-mark { width: 30px; height: 30px; gap: 3px; padding: 7px; border-radius: 9px; }
+.brand-mark i, .hero-mark i { border-radius: 2.5px; background: rgba(255,255,255,.95); }
+.brand-mark i:nth-child(2), .hero-mark i:nth-child(2) { background: rgba(255,255,255,.62); }
+.brand-mark i:nth-child(3), .hero-mark i:nth-child(3) { background: rgba(255,255,255,.78); }
+.panel-toggle, .panel-handle, .card-action { border-radius: var(--radius-control); transition: background .15s, color .15s; }
+.history-new { min-height: 42px; margin: 0 16px 14px; border: 0; border-radius: 12px; color: #fff; font-weight: 600; letter-spacing: .3px;
+  background: linear-gradient(135deg, #3b6cff 0%, #5b6dff 55%, #6a5cff 100%); box-shadow: 0 8px 18px -10px rgba(59,108,255,.9), inset 0 1px 0 rgba(255,255,255,.2);
+  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s; }
+.history-new:hover, .history-new:focus-visible { color: #fff; background: linear-gradient(135deg, #3b6cff 0%, #5b6dff 55%, #6a5cff 100%); filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 22px -10px rgba(59,108,255,.95), inset 0 1px 0 rgba(255,255,255,.2); }
+.history-new:active { transform: translateY(0); filter: brightness(.98); }
+.history-search :deep(.el-input__wrapper) { min-height: 36px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .15s; }
+.history-search :deep(.el-input__wrapper:hover) { box-shadow: 0 0 0 1px var(--line-strong) inset; }
+.history-search :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #9db4ff inset, 0 0 0 3px rgba(59,108,255,.1); }
+.history-heading { padding: 14px 20px 6px; font-size: 11.5px; letter-spacing: .4px; color: #8a93a3; }
+.count { border-radius: 999px; background: #e9edf5; color: #6b7587; }
+.history-item { margin: 2px 10px; border-radius: 12px; transition: background .15s, border-color .15s, box-shadow .15s; }
+.history-item:hover, .history-item:focus-within { --history-item-bg: #ebeff7; }
+.history-item.selected { --history-item-bg: #fff; border-color: #e3e9f4; box-shadow: var(--shadow-sm); }
+.history-item.selected::before { content: ''; position: absolute; left: -1px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: linear-gradient(180deg, #3b6cff, #6a5cff); }
+.history-select { padding: 10px 12px; border-radius: 12px; }
+.history-select strong { font-weight: 500; color: var(--ink-2); }
+.history-item.selected .history-select strong { font-weight: 600; color: var(--ink); }
+.history-actions :deep(.el-button) { border-radius: 7px; }
+.history-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 20px 24px; text-align: center; }
+.history-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #fff; color: #9aa8c4; font-size: 20px; box-shadow: var(--shadow-sm); border: 1px solid var(--line); }
+.history-empty p { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+/* 主区域：起始页的柔和光晕背景 */
+.chat-pane { background: #fff; }
+.chat-pane--welcome::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(720px 360px at 50% 8%, rgba(59,108,255,.10), transparent 70%), radial-gradient(520px 300px at 78% 28%, rgba(124,92,255,.07), transparent 70%), radial-gradient(520px 300px at 20% 34%, rgba(20,184,166,.05), transparent 70%); }
+.chat-scroll-area, .composer-region { position: relative; z-index: 1; }
+
+/* 起始页：欢迎语 + 示例卡片 */
+.welcome { flex-direction: column; justify-content: flex-end; align-items: center; gap: 28px; padding: 24px 40px 20px; }
+.welcome-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; animation: agent-rise .6s var(--ease-out) both; }
+.hero-mark { width: 52px; height: 52px; gap: 5px; padding: 12px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 14px 30px -12px rgba(59,108,255,.75), inset 0 1px 0 rgba(255,255,255,.28); }
+.hero-mark i { border-radius: 4px; }
+.welcome-title { margin: 0; font-size: 30px; line-height: 1.3; font-weight: 700; letter-spacing: .5px;
+  background: linear-gradient(100deg, #1f2633 0%, #2c3a63 40%, #3b6cff 75%, #6a5cff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.welcome-tip { max-width: 560px; margin: 12px 0 0; font-size: 14.5px; line-height: 1.75; color: var(--muted); }
+.suggestions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; }
+.suggestion { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px 14px 14px 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.82); backdrop-filter: blur(6px); box-shadow: var(--shadow-sm); color: var(--ink-2);
+  transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out), border-color .2s; animation: agent-rise .6s var(--ease-out) both; animation-delay: calc(120ms + var(--i, 0) * 70ms); }
+.suggestion:hover, .suggestion:focus-visible { background: #fff; border-color: #cfdaf5; color: var(--ink); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.suggestion:active { transform: translateY(0); }
+.suggestion-icon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px; font-size: 18px; }
+.suggestion-icon.tone-0 { color: #3b6cff; background: #ecf1ff; }
+.suggestion-icon.tone-1 { color: #0f9f8f; background: #e7f7f4; }
+.suggestion-icon.tone-2 { color: #7c5cff; background: #f1edff; }
+.suggestion-text { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.suggestion-text strong { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.5; }
+.suggestion-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.suggestion-arrow { flex-shrink: 0; color: #b4bdcc; font-size: 14px; opacity: 0; transform: translateX(-4px); transition: opacity .2s, transform .2s var(--ease-out), color .2s; }
+.suggestion:hover .suggestion-arrow, .suggestion:focus-visible .suggestion-arrow { opacity: 1; transform: none; color: var(--blue); }
+.chat-pane--welcome .composer-region { padding-bottom: clamp(32px, 24vh, 260px); animation: agent-rise .6s var(--ease-out) .08s both; }
+@container agent-welcome (max-width: 640px) {
+  .welcome { gap: 20px; padding: 16px 16px 12px; }
+  .welcome-title { font-size: 22px; }.welcome-tip { font-size: 13px; }.hero-mark { width: 42px; height: 42px; padding: 10px; gap: 4px; margin-bottom: 14px; border-radius: 13px; }
+  .suggestions { grid-template-columns: 1fr; gap: 8px; }
+  .suggestion { padding: 10px 12px; border-radius: 14px; }.suggestion-icon { width: 32px; height: 32px; font-size: 16px; border-radius: 9px; }
+  .suggestion-text { flex-direction: row; align-items: baseline; gap: 8px; }.suggestion-text strong { flex-shrink: 0; font-size: 13px; }
+  .suggestion-arrow { opacity: 1; transform: none; }
+}
+@container agent-welcome (max-height: 420px) { .welcome-tip, .hero-mark { display: none; } .welcome { gap: 16px; } }
+@container agent-welcome (max-height: 280px) { .welcome-hero { display: none; } }
+
+/* 顶部会话栏：半透明毛玻璃 + 细分隔 */
+.conversation-bar { position: relative; z-index: 3; min-height: 58px; padding: 10px 24px; background: rgba(255,255,255,.86); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid #eef1f6; }
+.conversation-title { padding: 6px 10px; margin-left: -10px; border-radius: var(--radius-control); transition: background .15s; }
+.conversation-title:hover { background: var(--hover); }
+.conversation-title > span { font-size: 15px; font-weight: 600; }
+.conversation-title .el-icon { opacity: 0; transition: opacity .15s; }
+.conversation-title:hover .el-icon, .conversation-title:focus-visible .el-icon { opacity: 1; }
+.utility-button { border-radius: 9px; transition: background .15s, color .15s; }
+.utility-button:hover { color: var(--blue); background: var(--blue-soft); }
+.utility-button.starred { color: #e0a100; }
+.conversation-outline { top: 62px; border-color: var(--line); border-radius: 16px; box-shadow: var(--shadow-lg); animation: agent-pop .18s var(--ease-out) both; transform-origin: top right; }
+.outline-entry { border-radius: 10px; }
+.outline-entry:hover > span { color: var(--blue); }
+
+/* 消息 */
+.message-list { padding: 32px 40px 32px; }
+.message-row { margin-bottom: 30px; animation: agent-rise .42s var(--ease-out) both; }
+.user .bubble { padding: 12px 18px; border: 0; border-radius: 20px 20px 6px 20px; color: #fff; line-height: 1.75;
+  background: linear-gradient(135deg, #3b6cff 0%, #5a67ff 60%, #6a5cff 100%); box-shadow: 0 10px 24px -14px rgba(59,108,255,.85); }
+.user .bubble ::selection { background: rgba(255,255,255,.35); }
+.sent-attachments .attachment-preview { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.16); color: #fff; }
+.sent-attachments .attachment-preview:hover { background: rgba(255,255,255,.26); color: #fff; }
+.message-meta { min-height: 22px; margin-bottom: 6px; }
+.message-time { color: #9aa3b2; font-size: 11.5px; }
+.bubble { font-size: 14.5px; line-height: 1.85; color: var(--ink); }
+.question-actions { opacity: .0; transition: opacity .15s; }
+.message-row:hover .question-actions, .question-actions:focus-within { opacity: 1; }
+@media (hover: none), (pointer: coarse) { .question-actions { opacity: 1; } }
+.message-actions { gap: 2px; margin-top: 12px; }
+.message-actions :deep(.el-button) { border-radius: 9px; color: #7f8899; }
+.message-actions :deep(.el-button:not(:disabled):hover), .message-actions .utility-button:hover { color: var(--blue); background: var(--blue-soft); }
+.feedback-button { transition: transform .15s var(--ease-out), background .15s, color .15s; }
+.feedback-button:active { transform: scale(.88); }
+.feedback-button.selected { color: var(--blue); background: var(--blue-soft); }
+
+/* 执行过程入口：胶囊样式 */
+.trace-toggle { gap: 8px; min-height: 34px; padding: 4px 12px 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: #f8fafd; color: #6b7587; transition: background .15s, border-color .15s, color .15s; }
+.trace-toggle:hover { color: var(--ink); background: #f1f5fd; border-color: #d6e0f5; }
+.process-trace.live .trace-toggle, .waiting { min-height: 38px; }
+.process-trace.live .trace-toggle { padding-left: 8px; background: linear-gradient(90deg, #f1f5ff, #f8f6ff); border-color: #dbe4fb; }
+.waiting { padding: 4px 14px 4px 8px; border: 1px solid #dbe4fb; border-radius: 999px; background: linear-gradient(90deg, #f1f5ff, #f8f6ff); }
+.live-step { color: #33415c; }
+.process-trace.completed .trace-result { color: #16a34a; }
+.timeline { margin: 14px 0 2px 16px; border-left-color: #e3e8f1; }
+.process-card { border-radius: 12px; background: #fafbfd; transition: border-color .15s, box-shadow .15s; }
+.process-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.process-details pre, .json-text { background: #f2f5fa; border-radius: 10px; }
+
+/* 图表卡片 */
+.answer-part + .answer-part { margin-top: 20px; }
+.chart-card { border-color: var(--line); border-radius: 18px; box-shadow: var(--shadow-md); transition: box-shadow .2s; }
+.chart-card .card-head { gap: 10px; padding: 14px 16px 12px 18px; border-bottom: 0; }
+.chart-card .card-head .kind-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--blue-soft); color: var(--blue); font-size: 16px; }
+.chart-card .card-head .process-title { font-size: 15px; font-weight: 600; }
+.card-action { width: 34px; height: 34px; color: #7f8899; }
+.card-action:hover { color: var(--blue); background: var(--blue-soft); }
+.chart-card .chart-block-body { padding: 0 18px 16px; }
+.chart-summary { margin: -2px 0 8px 40px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+:deep(.chart-container) { height: 340px; margin-top: 4px; }
+.chart-meta { margin: 8px 0 0; padding-top: 10px; border-top: 1px dashed var(--line); color: #9aa3b2; }
+.chart-table-scroll, :deep(.table-scroll) { border-color: var(--line); border-radius: 12px; }
+.chart-table th, .chart-table td, :deep(.markdown-body th), :deep(.markdown-body td) { padding: 11px 16px; border-bottom-color: #eef1f6; }
+.chart-table thead th, :deep(.markdown-body th) { background: #f6f8fc; color: #5b6576; font-size: 12.5px; font-weight: 600; }
+.chart-table td.num, .chart-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.chart-table tbody tr, :deep(.markdown-body tbody tr) { transition: background .12s; }
+.chart-table tbody tr:hover, :deep(.markdown-body tbody tr:hover) { background: #f7f9ff; }
+
+/* Markdown 排版 */
+:deep(.markdown-body strong) { font-weight: 600; color: #111827; }
+:deep(.markdown-body li::marker) { color: #8aa2ea; }
+:deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.22em; }
+:deep(.markdown-body h3) { font-size: 1.1em; }
+:deep(.markdown-body hr) { height: 1px; margin: 20px 0; border: 0; background: var(--line); }
+:deep(.markdown-body blockquote) { border-left-color: #a9bdf5; background: #f6f8ff; color: #5b6576; border-radius: 0 10px 10px 0; }
+:deep(.markdown-body code) { background: #f1f4fa; color: #3a4a74; border-radius: 6px; }
+:deep(.code-block) { border-color: var(--line); border-radius: 14px; background: #fbfcfe; box-shadow: var(--shadow-sm); }
+:deep(.code-toolbar) { background: #f4f6fb; border-bottom-color: var(--line); font-size: 11.5px; letter-spacing: .3px; }
+:deep(.code-toolbar button) { border-radius: 7px; }
+:deep(.code-toolbar button:hover) { color: var(--blue); background: var(--blue-soft); }
+:deep(.code-block pre) { font-size: 12.5px; }
+:deep(.stream-cursor) { width: 2px; background: var(--blue); opacity: .55; }
+
+/* 错误卡片 */
+.error-card { border-color: #f6d4d9; border-radius: 14px; background: linear-gradient(180deg, #fff7f8, #fff); box-shadow: var(--shadow-sm); color: #c2414f; }
+
+/* 回到底部 */
+.back-bottom { height: 38px; padding: 0 16px; border-color: var(--line); border-radius: 999px; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); box-shadow: var(--shadow-md); color: #4b5565; animation: agent-fade .2s ease both; }
+.back-bottom:hover { color: var(--blue); border-color: #cfdaf5; background: #fff; }
+@keyframes agent-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 输入区：悬浮卡片 + 聚焦光晕 + 渐变发送键 */
+.composer-region { padding: 10px 40px 22px; }
+.composer { padding: 14px 14px 10px 18px; border: 1px solid var(--line-strong); border-radius: 22px; background: #fff; box-shadow: var(--shadow-md); transition: border-color .2s, box-shadow .2s; }
+.composer:hover { border-color: #cdd7e8; }
+.composer:focus-within { border-color: #a7bcff; box-shadow: 0 0 0 4px rgba(59,108,255,.10), var(--shadow-md); }
+.chat-pane--welcome .composer { box-shadow: var(--shadow-lg); }
+.chat-pane--welcome .composer:focus-within { box-shadow: 0 0 0 4px rgba(59,108,255,.10), var(--shadow-lg); }
+.composer :deep(.el-textarea__inner) { font-size: 14.5px; line-height: 1.75; }
+.composer :deep(.el-textarea__inner::placeholder) { color: #9aa3b2; }
+.composer-toolbar { margin-top: 8px; }
+.composer-tools :deep(.el-button) { border-radius: 999px; padding: 7px 12px 7px 10px; color: #5b6576; background: #f4f6fa; }
+.composer-tools :deep(.el-button:not(.is-disabled):hover) { color: var(--blue); background: var(--blue-soft); }
+.attachment-info { border-radius: 999px; }
+.composer-toolbar :deep(.send-button) { width: 38px; min-width: 38px; height: 38px; border: 0; color: #fff;
+  background: linear-gradient(135deg, #3b6cff 0%, #6a5cff 100%); box-shadow: 0 8px 18px -8px rgba(59,108,255,.9);
+  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s, background .2s; }
+.composer-toolbar :deep(.send-button:not(.is-disabled):hover) { transform: translateY(-1px) scale(1.04); filter: brightness(1.06); box-shadow: 0 12px 22px -8px rgba(59,108,255,.95); }
+.composer-toolbar :deep(.send-button:not(.is-disabled):active) { transform: scale(.94); }
+.composer-toolbar :deep(.send-button.is-disabled) { color: #fff; background: #d5dbe6; border: 0; box-shadow: none; }
+.composer-toolbar :deep(.stop-button) { height: 38px; padding: 0 16px; border-radius: 999px; border-color: #d9e2f4; background: #f4f7ff; color: #3b4f80; }
+.composer-toolbar :deep(.stop-button:hover) { color: var(--blue); border-color: #a7bcff; background: #eaf0ff; }
+@media (pointer: coarse) { .composer-toolbar :deep(.send-button) { width: 44px; min-width: 44px; height: 44px; } }
+.attachment-chip { border-color: var(--line); border-radius: 12px; background: #f6f8fc; }
+.attachment-drop { inset: 14px; border-color: #9db4ff; border-radius: 22px; background: rgba(243,246,255,.94); backdrop-filter: blur(4px); color: var(--blue); }
+.composer-editing { color: var(--blue); }
+
+/* 细滚动条 */
+:deep(.el-scrollbar__thumb) { background: #c4ccd8; }
+:deep(.el-scrollbar__thumb:hover) { background: #a9b3c2; }
+
+/* 抽屉与对话框圆角 */
+.agent-page :deep(.el-dialog) { border-radius: 18px; overflow: hidden; }
+.agent-page :deep(.el-drawer) { background: linear-gradient(180deg, #f7f9fd 0%, #f3f6fb 100%); }
+
+@keyframes agent-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes agent-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 767px) {
+  .history-brand { padding: 6px 16px 14px; }
+  .message-list { padding: 22px 14px 20px; }
+  .composer-region { padding: 8px 12px max(12px, env(safe-area-inset-bottom)); }
+  .composer { padding: 12px 12px 8px 14px; border-radius: 20px; }
+  .conversation-bar { padding: 8px 12px; min-height: 52px; }
+  .conversation-outline { top: 56px; }
+  .chart-summary { margin-left: 0; }
+  .chart-card .card-head { padding: 12px 12px 10px; }.chart-card .chart-block-body { padding: 0 12px 12px; }
+  :deep(.chart-container) { height: 300px; }
+  .composer-tools :deep(.el-button) { padding: 7px 10px; }
+}
 
 /* 减少动态仍隐藏文字光标、禁用其他动画；按用户明确选择保留生成状态标识。 */
 @media (prefers-reduced-motion: reduce) {
