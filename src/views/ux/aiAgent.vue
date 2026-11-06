@@ -1,246 +1,231 @@
 <template>
   <section ref="processRoot" class="agent-page" :aria-label="t('AIAGENT.BRAND')" @keydown="onWorkspaceKeydown">
     <div class="workspace">
-      <component :is="mobile ? ElDrawer : 'aside'" v-if="mobile || sidebarOpen" class="history-panel"
-        v-bind="mobile ? { direction: 'ltr', size: 'min(300px, 88vw)', title: t('AIAGENT.HISTORY.TITLE'), bodyClass: 'agent-history-body', headerClass: 'agent-history-header', appendToBody: false } : {}"
-        :model-value="drawerOpen" @update:model-value="drawerOpen = $event" @opened="onHistoryDrawerOpened" @closed="historySearchPending = false">
-        <div class="history-content">
-        <div class="history-brand">
-          <span class="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-          <h1>{{ t('AIAGENT.BRAND') }}</h1>
-          <el-tooltip :content="t('AIAGENT.HISTORY.TOGGLE')"><button class="panel-toggle" type="button"
-            :aria-label="t('AIAGENT.HISTORY.TOGGLE')" :aria-expanded="true" @click="toggleSidebar"><el-icon><Fold /></el-icon></button></el-tooltip>
+      <!-- 侧栏：品牌、新建、搜索、按时间分组的历史会话 -->
+      <aside v-if="sidebarOpen" class="sidebar">
+        <div class="brand">
+          <BrandMark />
+          <h1 :title="t('AIAGENT.BRAND')">{{ t('AIAGENT.BRAND') }}</h1>
+          <el-tooltip :content="uiCopy.collapse" placement="bottom"><button class="icon-button" type="button" :aria-label="uiCopy.collapse" :aria-expanded="true" @click="toggleSidebar"><el-icon><PanelIcon /></el-icon></button></el-tooltip>
         </div>
-        <el-button class="history-new" :icon="Plus" @click="newConversation">{{ t('AIAGENT.HISTORY.NEW') }}</el-button>
-        <div class="history-search"><el-input ref="historySearchRef" v-model="historyQuery" clearable :prefix-icon="Search" :placeholder="t('CM.COMMON.SEARCH')" :aria-label="`${t('AIAGENT.HISTORY.TITLE')} · ${t('CM.COMMON.SEARCH')}`" @keydown.esc.stop="historyQuery = ''" /></div>
+        <button class="new-chat" type="button" @click="newConversation"><el-icon><NewChatIcon /></el-icon><span>{{ t('AIAGENT.HISTORY.NEW') }}</span></button>
+        <div class="history-search">
+          <el-input ref="historySearchRef" v-model="historyQuery" clearable :prefix-icon="Search" :placeholder="uiCopy.searchHistory" :aria-label="`${t('AIAGENT.HISTORY.TITLE')} · ${t('CM.COMMON.SEARCH')}`" @keydown.esc.stop="historyQuery = ''">
+            <template v-if="!historyQuery" #suffix><kbd>Ctrl K</kbd></template>
+          </el-input>
+        </div>
         <el-scrollbar class="history-scroll">
-          <div v-if="!filteredHistory.length" class="history-empty"><span class="history-empty-icon" aria-hidden="true"><el-icon><component :is="historyQuery.trim() ? Search : ChatLineRound" /></el-icon></span><p>{{ t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY') }}</p></div>
-          <template v-if="pinned.length">
-            <div class="history-heading"><span><el-icon><StarFilled /></el-icon>{{ t('AIAGENT.HISTORY.FAVORITES') }}</span><span class="count">{{ pinned.length }}</span></div>
-            <div v-for="chat in pinned" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId }">
-              <button class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" @click="openHistoryResult(chat)">
-                <i class="state-dot" :class="chatState(chat)" :title="chatStateKeys[chatState(chat)] ? t(chatStateKeys[chatState(chat)]) : undefined" aria-hidden="true" /><span><strong :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')">{{ chat.title || t('AIAGENT.HISTORY.UNTITLED') }}</strong><span v-if="historyQuery.trim()" class="history-match" :title="historyMatch(chat)">{{ historyMatch(chat) }}</span><span v-else class="history-meta"><time>{{ formatTime(chat.updatedAt) }}</time><em v-if="chatState(chat) !== 'empty'" class="history-state" :class="chatState(chat)">{{ t(chatStateKeys[chatState(chat)]) }}</em></span></span>
+          <p v-if="!filteredHistory.length" class="history-empty">{{ t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY') }}</p>
+          <section v-for="group in historyGroups" :key="group.key" class="history-group">
+            <h2>{{ group.label }}</h2>
+            <div v-for="chat in group.items" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId }">
+              <button class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')" @click="openHistoryResult(chat)">
+                <span class="history-title">{{ chat.title || t('AIAGENT.HISTORY.UNTITLED') }}</span>
+                <span v-if="historyQuery.trim()" class="history-match">{{ historyMatch(chat) }}</span>
+                <i v-if="['running', 'failed', 'stopped'].includes(chatState(chat))" class="history-dot" :class="chatState(chat)" :title="t(chatStateKeys[chatState(chat)])" aria-hidden="true" />
               </button>
-              <div class="history-actions">
-                <el-button text :icon="StarFilled" class="starred" :aria-label="t('AIAGENT.HISTORY.UNFAVORITE')" :title="t('AIAGENT.HISTORY.UNFAVORITE')" @click="toggleFavorite(chat)" />
-                <el-button text :icon="EditPen" :aria-label="t('AIAGENT.HISTORY.RENAME')" :title="t('AIAGENT.HISTORY.RENAME')" @click="renameConversation(chat)" />
-                <el-button text :icon="Delete" :aria-label="t('AIAGENT.HISTORY.DELETE')" :title="t('AIAGENT.HISTORY.DELETE')" @click="deleteConversation(chat)" />
-              </div>
+              <el-dropdown trigger="click" placement="bottom-end" popper-class="agent-menu" @command="(command: string) => onChatCommand(chat, command)">
+                <button class="history-more" type="button" :aria-label="uiCopy.more"><el-icon><MoreIcon /></el-icon></button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="favorite" :icon="chat.favorite ? StarFilled : Star">{{ t(chat.favorite ? 'AIAGENT.HISTORY.UNFAVORITE' : 'AIAGENT.HISTORY.FAVORITE') }}</el-dropdown-item>
+                    <el-dropdown-item command="rename" :icon="EditPen">{{ t('AIAGENT.HISTORY.RENAME') }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" :icon="Delete" divided class="danger">{{ t('AIAGENT.HISTORY.DELETE') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
-          </template>
-          <div v-if="unpinned.length" class="history-heading"><span>{{ t('AIAGENT.HISTORY.TITLE') }}</span><span class="count">{{ unpinned.length }}</span></div>
-          <div v-for="chat in unpinned" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId }">
-            <button class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" @click="openHistoryResult(chat)">
-              <i class="state-dot" :class="chatState(chat)" :title="chatStateKeys[chatState(chat)] ? t(chatStateKeys[chatState(chat)]) : undefined" aria-hidden="true" /><span><strong :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')">{{ chat.title || t('AIAGENT.HISTORY.UNTITLED') }}</strong><span v-if="historyQuery.trim()" class="history-match" :title="historyMatch(chat)">{{ historyMatch(chat) }}</span><span v-else class="history-meta"><time>{{ formatTime(chat.updatedAt) }}</time><em v-if="chatState(chat) !== 'empty'" class="history-state" :class="chatState(chat)">{{ t(chatStateKeys[chatState(chat)]) }}</em></span></span>
-            </button>
-            <div class="history-actions">
-              <el-button text :icon="Star" :aria-label="t('AIAGENT.HISTORY.FAVORITE')" :title="t('AIAGENT.HISTORY.FAVORITE')" @click="toggleFavorite(chat)" />
-              <el-button text :icon="EditPen" :aria-label="t('AIAGENT.HISTORY.RENAME')" :title="t('AIAGENT.HISTORY.RENAME')" @click="renameConversation(chat)" />
-              <el-button text :icon="Delete" :aria-label="t('AIAGENT.HISTORY.DELETE')" :title="t('AIAGENT.HISTORY.DELETE')" @click="deleteConversation(chat)" />
-            </div>
-          </div>
+          </section>
         </el-scrollbar>
-        <p v-if="storageWarning" class="history-note warning" role="alert">{{ t(storageWarning) }}</p>
-        </div>
-      </component>
-      <!-- 展示层修复：窄屏抽屉关闭时也保留原有历史入口，复用 toggleSidebar。 -->
-      <el-tooltip v-if="mobile || !sidebarOpen" :content="t('AIAGENT.HISTORY.TOGGLE')" placement="right">
-        <button class="panel-handle" type="button" :aria-label="t('AIAGENT.HISTORY.TOGGLE')" :aria-expanded="mobile ? drawerOpen : sidebarOpen" @click="toggleSidebar"><el-icon><Fold /></el-icon></button>
-      </el-tooltip>
-      <main class="chat-pane" :class="{ 'chat-pane--welcome': !messages.length }" @dragenter="onAttachmentDragEnter" @dragover="onAttachmentDragOver" @dragleave="onAttachmentDragLeave" @drop="onAttachmentDrop">
+        <p v-if="storageWarning" class="history-note" role="alert">{{ t(storageWarning) }}</p>
+      </aside>
+
+      <main class="chat-pane" :class="{ 'is-welcome': !messages.length, 'sidebar-hidden': !sidebarOpen }" @dragenter="onAttachmentDragEnter" @dragover="onAttachmentDragOver" @dragleave="onAttachmentDragLeave" @drop="onAttachmentDrop">
         <div v-if="attachmentDragDepth" class="attachment-drop" aria-hidden="true"><el-icon><Paperclip /></el-icon><strong>{{ attachmentCopy.add }}</strong><span>{{ attachmentHint }}</span></div>
-        <!-- 会话目录只服务于长对话定位；导出与独立阅读入口按需求移除。 -->
-        <header v-if="messages.length" class="conversation-bar">
-          <button class="conversation-title" type="button" :title="t('AIAGENT.HISTORY.RENAME')" @click="renameConversation(current)"><span>{{ current.title || t('AIAGENT.HISTORY.UNTITLED') }}</span><el-icon><EditPen /></el-icon></button>
-          <div class="conversation-controls">
-            <el-tooltip :content="t(current.favorite ? 'AIAGENT.HISTORY.UNFAVORITE' : 'AIAGENT.HISTORY.FAVORITE')"><button type="button" class="utility-button" :class="{ starred: current.favorite }" :aria-label="t(current.favorite ? 'AIAGENT.HISTORY.UNFAVORITE' : 'AIAGENT.HISTORY.FAVORITE')" :aria-pressed="!!current.favorite" @click="toggleFavorite(current)"><el-icon><component :is="current.favorite ? StarFilled : Star" /></el-icon></button></el-tooltip>
-            <el-tooltip :content="t('AIAGENT.A11Y.MESSAGES')"><button ref="outlineButton" type="button" class="utility-button" :aria-label="t('AIAGENT.A11Y.MESSAGES')" :aria-expanded="outlineOpen" aria-controls="conversation-outline" @click="outlineOpen = !outlineOpen"><el-icon><Operation /></el-icon><span>{{ questionEntries.length }}</span></button></el-tooltip>
-          </div>
+        <el-tooltip v-if="!sidebarOpen" :content="uiCopy.expand" placement="right">
+          <button class="icon-button sidebar-open" type="button" :aria-label="uiCopy.expand" :aria-expanded="false" @click="toggleSidebar"><el-icon><PanelIcon /></el-icon></button>
+        </el-tooltip>
+
+        <!-- 顶栏：会话标题即菜单（收藏 / 重命名 / 删除） -->
+        <header v-if="messages.length" class="chat-header">
+          <el-dropdown trigger="click" placement="bottom-start" popper-class="agent-menu" @command="(command: string) => onChatCommand(current, command)">
+            <button class="chat-title" type="button">
+              <el-icon v-if="current.favorite" class="title-star"><StarFilled /></el-icon>
+              <span>{{ current.title || t('AIAGENT.HISTORY.UNTITLED') }}</span>
+              <el-icon class="title-chevron"><ChevronIcon /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="favorite" :icon="current.favorite ? StarFilled : Star">{{ t(current.favorite ? 'AIAGENT.HISTORY.UNFAVORITE' : 'AIAGENT.HISTORY.FAVORITE') }}</el-dropdown-item>
+                <el-dropdown-item command="rename" :icon="EditPen">{{ t('AIAGENT.HISTORY.RENAME') }}</el-dropdown-item>
+                <el-dropdown-item command="delete" :icon="Delete" divided class="danger">{{ t('AIAGENT.HISTORY.DELETE') }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </header>
-        <nav v-if="outlineOpen && messages.length" id="conversation-outline" class="conversation-outline" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
-          <div class="outline-heading"><strong>{{ t('AIAGENT.A11Y.MESSAGES') }}</strong><button type="button" class="utility-button" :aria-label="t('CM.COMMON.CLOSE')" @click="closeOutline"><el-icon><Close /></el-icon></button></div>
-          <button v-for="(entry, index) in questionEntries" :key="entry.id" type="button" class="outline-entry" @click="jumpToMessage(entry.id); outlineOpen = false"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ entry.content }}</strong><el-icon><ArrowRight /></el-icon></button>
-        </nav>
-        <div class="chat-scroll-area">
-          <el-scrollbar ref="scrollRef" class="message-scroll" :class="{ 'message-scroll--welcome': !messages.length }" @scroll="onScroll">
-            <div v-if="!messages.length" class="welcome">
-              <!-- 起始页：一句欢迎语 + 三张示例卡片；复用既有 WELCOME / EXAMPLE 语言包键，不新增键。 -->
-              <div class="welcome-hero">
-                <span class="hero-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-                <h2 class="welcome-title">{{ t('AIAGENT.WELCOME.TITLE') }}</h2>
-                <p class="welcome-tip">{{ t('AIAGENT.WELCOME.TIP') }}</p>
-              </div>
-              <div class="suggestions">
-                <button v-for="(example, index) in welcomeExamples" :key="example.key" type="button" class="suggestion" :style="{ '--i': index }" :title="t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`))">
-                  <span class="suggestion-icon" :class="`tone-${index}`" aria-hidden="true"><el-icon><component :is="example.icon" /></el-icon></span>
-                  <span class="suggestion-text"><strong>{{ t(`AIAGENT.EXAMPLE.${example.key}.TITLE`) }}</strong><span>{{ t(`AIAGENT.EXAMPLE.${example.key}.DESCRIPTION`) }}</span></span>
-                  <el-icon class="suggestion-arrow" aria-hidden="true"><Right /></el-icon>
-                </button>
-              </div>
-            </div>
-            <div v-else class="message-list" role="log" aria-live="off" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
-              <article v-for="message in messages" :id="`chat-message-${message.id}`" :key="message.id" class="message-row" :class="[message.role, { located: locatedMessageId === message.id }]" tabindex="-1">
-                <div class="message-column">
-                  <!-- 按本轮反馈：生成状态统一到过程入口，不再另设消息头胶囊。 -->
-                  <div v-if="!isActive(message)" class="message-meta">
-                    <time v-if="message.role === 'user' || (!isActive(message) && !message.finishedAt)" class="message-time" :datetime="new Date(message.createdAt).toISOString()">{{ formatTime(message.createdAt) }}</time>
-                    <!-- 结束异常/中断不能沿用“完成于”文案；仅调整呈现，复用现有状态与耗时键。 -->
-                    <span v-if="message.finishedAt && !isActive(message)" class="message-time finished">
-                      <template v-if="message.status === 'completed'">{{ finishText(message) }}</template>
-                      <template v-else>{{ t(statusKeys[message.status]) }} · {{ t('AIAGENT.STATUS.ELAPSED', { seconds: ((message.finishedAt - message.createdAt) / 1000).toFixed(1) }) }}</template>
-                    </span>
+
+        <!-- 起始页 -->
+        <div v-if="!messages.length" class="welcome">
+          <BrandMark class="welcome-mark" />
+          <h2 class="welcome-title">{{ t('AIAGENT.WELCOME.TITLE') }}</h2>
+          <p class="welcome-tip">{{ t('AIAGENT.WELCOME.TIP') }}</p>
+        </div>
+
+        <div v-else class="chat-scroll-area">
+          <el-scrollbar ref="scrollRef" class="message-scroll" @scroll="onMessageScroll">
+            <div class="message-list" role="log" aria-live="off" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
+              <article v-for="message in messages" :id="`chat-message-${message.id}`" :key="message.id" class="message" :class="[message.role, { located: locatedMessageId === message.id }]" tabindex="-1">
+                <!-- 用户提问 -->
+                <template v-if="message.role === 'user'">
+                  <div class="question" :title="formatTime(message.createdAt)">
+                    <p class="question-text">{{ message.content }}</p>
+                    <div v-if="message.attachments?.length" class="sent-attachments">
+                      <button v-for="file in message.attachments" :key="file.id" type="button" class="file-chip" :title="file.name" @click="attachmentPreview = file"><el-icon><Document /></el-icon><span>{{ file.name }}</span></button>
+                    </div>
                   </div>
-                  <div class="bubble">
-                    <template v-if="message.role === 'user'">
-                      <p class="user-content">{{ message.content }}</p>
-                      <div v-if="message.attachments?.length" class="sent-attachments">
-                        <button v-for="file in message.attachments" :key="file.id" type="button" class="attachment-preview" :title="file.name" @click="attachmentPreview = file"><el-icon><Document /></el-icon><span>{{ file.name }}</span></button>
-                      </div>
-                    </template>
-                    <template v-else>
-                      <!-- 单一状态入口：连接、执行、输出沿用同一行视觉；过程默认收起，保留手动选择。 -->
-                      <div v-if="isActive(message) && !message.process.length" class="waiting">
+                  <div class="question-actions">
+                    <el-tooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')"><button type="button" class="icon-button small" :disabled="streaming || attachmentReading" :aria-label="t('AIAGENT.BUTTON.EDIT_QUESTION')" @click="editQuestion(message)"><el-icon><EditPen /></el-icon></button></el-tooltip>
+                  </div>
+                </template>
+
+                <!-- 助手回答 -->
+                <template v-else>
+                  <div v-if="message.process.length || isActive(message)" class="process" :class="[message.status, { live: isActive(message), open: traceOpen(message) }]">
+                    <button class="trace-toggle" type="button" :data-message-id="message.id" :aria-expanded="traceOpen(message)" :aria-controls="`trace-${message.id}`">
+                      <template v-if="isActive(message)">
                         <ActivityMark />
-                        <span class="live-step">{{ t(statusKeys[message.status]) }}</span>
-                        <span class="status-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
-                      </div>
-                      <div v-if="message.process.length" class="process-trace" :class="[{ live: isActive(message) }, message.status]">
-                        <button class="trace-toggle" type="button" :data-message-id="message.id" :aria-expanded="traceOpen(message)" :aria-controls="`trace-${message.id}`">
-                          <template v-if="isActive(message)">
-                            <ActivityMark />
-                            <span class="live-step">{{ liveLabel(message) }}</span>
-                            <span class="status-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
+                        <span class="trace-label">{{ liveLabel(message) }}<template v-if="liveStepName(message)"> · {{ liveStepName(message) }}</template></span>
+                        <span class="trace-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
+                      </template>
+                      <template v-else>
+                        <el-icon class="trace-result"><component :is="message.status === 'error' ? CircleClose : message.status === 'stopped' ? VideoPause : CircleCheck" /></el-icon>
+                        <span class="trace-label">{{ summaryLabel(message) }}</span>
+                        <span v-if="stepCounts(message).length" class="trace-counts">
+                          <span v-for="entry in stepCounts(message)" :key="entry.group" :title="entry.label"><el-icon><component :is="entry.icon" /></el-icon>{{ entry.count }}</span>
+                        </span>
+                      </template>
+                      <el-icon v-if="layout(message).timeline.length" class="trace-chevron"><ChevronIcon /></el-icon>
+                    </button>
+                    <div v-if="traceOpen(message) && layout(message).timeline.length" :id="`trace-${message.id}`" class="steps">
+                      <template v-for="item in layout(message).timeline" :key="item.id">
+                        <component :is="stepExpandable(item) ? 'button' : 'div'" class="step-row" :class="[stepGroup(item), item.status, { expandable: stepExpandable(item), open: stepExpandable(item) && stepOpen(message, item) }]"
+                          v-bind="stepExpandable(item) ? { type: 'button', 'data-message-id': message.id, 'data-process-id': item.id, 'aria-expanded': stepOpen(message, item) } : {}">
+                          <el-icon class="step-icon"><component :is="item.status === 'error' ? CircleClose : stepIcon(item)" /></el-icon>
+                          <span class="step-name">{{ stepName(item) }}</span>
+                          <span class="step-preview">{{ stepExpandable(item) && stepOpen(message, item) ? '' : stepPreview(message, item) }}</span>
+                          <span class="step-time">{{ stepTime(message, item) }}</span>
+                          <el-icon v-if="stepExpandable(item)" class="step-chevron"><ChevronIcon /></el-icon>
+                        </component>
+                        <div v-if="stepExpandable(item) && stepOpen(message, item)" class="step-detail">
+                          <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
+                          <template v-else-if="item.kind === 'subagent'">
+                            <template v-if="item.thinking"><h4>{{ t('AIAGENT.PROCESS.THINKING_TURN') }}</h4><p class="plain">{{ item.thinking }}</p></template>
+                            <template v-if="item.answer"><h4>{{ t('AIAGENT.PROCESS.SUBAGENT_ANSWER') }}</h4><Typewriter :content="item.answer" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" /></template>
+                            <p v-if="!item.thinking && !item.answer" class="plain">{{ t('AIAGENT.STATUS.WAITING') }}</p>
                           </template>
+                          <pre v-else-if="item.kind === 'json'" class="raw">{{ item.input }}</pre>
                           <template v-else>
-                            <el-icon class="trace-result" aria-hidden="true"><component :is="message.status === 'error' ? CircleClose : message.status === 'stopped' ? VideoPause : CircleCheck" /></el-icon>
-                            <span>{{ t('AIAGENT.PROCESS.TITLE') }}</span><span v-if="message.status === 'error' || message.status === 'stopped'" class="trace-outcome">{{ t(statusKeys[message.status]) }}</span><span class="count">{{ layout(message).timeline.length }}</span>
+                            <dl v-if="toolFacts(item).length" class="facts"><template v-for="fact in toolFacts(item)" :key="fact.label"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></template></dl>
+                            <p v-else class="plain">{{ t('AIAGENT.PROCESS.NO_DETAILS') }}</p>
+                            <details v-if="item.input" class="raw-details"><summary>{{ t('AIAGENT.PROCESS.RAW') }}</summary><pre class="raw">{{ prettyJson(item.input) }}</pre></details>
                           </template>
-                          <el-icon class="chevron" :class="{ expanded: traceOpen(message) }"><ArrowRight /></el-icon>
-                        </button>
-                        <ol v-if="traceOpen(message)" :id="`trace-${message.id}`" class="timeline">
-                          <li v-for="item in layout(message).timeline" :key="item.id" :class="['process-item', item.kind, item.status]">
-                            <span class="timeline-dot" :class="{ 'is-live': isActive(message) && item.status === 'running' }" aria-hidden="true" />
-                            <div v-if="item.kind === 'text'" class="reasoning-line">
-                              <Typewriter :content="item.text" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
-                            </div>
-                            <!-- 技能加载只是读了说明书（16ms），不是执行工具：一行淡色提示即可，不占可展开卡片。 -->
-                            <div v-else-if="item.skillLoad" class="skill-load-line">
-                              <el-icon><SkillIcon /></el-icon><span>{{ t('AIAGENT.PROCESS.SKILL_LOADED', { name: item.toolName }) }}</span>
-                            </div>
-                            <div v-else class="process-card">
-                              <button class="process-summary" type="button" :data-message-id="message.id" :data-process-id="item.id" :aria-expanded="item.expanded" :aria-controls="`process-${message.id}-${item.id}`">
-                                <el-icon class="kind-icon"><component :is="kindIcon(item)" /></el-icon>
-                                <span class="process-title">{{ processTitle(item) }}</span>
-                                <span class="duration">{{ durationText(item) }}</span>
-                                <el-icon class="process-state" :aria-label="t(processStatusKeys[item.status])" role="img">
-                                  <component :is="stateIcon(item)" />
-                                </el-icon>
-                                <el-icon class="chevron" :class="{ expanded: item.expanded }"><ArrowRight /></el-icon>
-                              </button>
-                              <div v-if="item.expanded" :id="`process-${message.id}-${item.id}`" class="process-details">
-                                <template v-if="item.kind === 'subagent'">
-                                  <p v-if="item.agentName" class="technical-name">{{ item.agentName }}</p>
-                                  <template v-if="item.thinking"><h4>{{ t('AIAGENT.PROCESS.SUBAGENT_THINKING') }}</h4><p class="reasoning-text">{{ item.thinking }}</p></template>
-                                  <template v-if="item.answer"><h4>{{ t('AIAGENT.PROCESS.SUBAGENT_ANSWER') }}</h4>
-                                    <Typewriter :content="item.answer" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" /></template>
-                                  <p v-if="!item.thinking && !item.answer" class="quiet">{{ t('AIAGENT.STATUS.WAITING') }}</p>
-                                </template>
-                                <template v-else-if="item.kind === 'json'"><pre class="json-text">{{ item.input }}</pre></template>
-                                <template v-else>
-                                  <h4>{{ t('AIAGENT.PROCESS.DETAILS_TITLE') }}</h4>
-                                  <dl v-if="toolFacts(item).length" class="tool-facts">
-                                    <template v-for="fact in toolFacts(item)" :key="fact.label"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></template>
-                                  </dl>
-                                  <p v-else class="quiet">{{ t('AIAGENT.PROCESS.NO_DETAILS') }}</p>
-                                  <details v-if="item.input" class="raw-details"><summary>{{ t('AIAGENT.PROCESS.RAW') }}</summary><pre>{{ prettyJson(item.input) }}</pre></details>
-                                </template>
-                              </div>
-                            </div>
-                          </li>
-                        </ol>
-                      </div>
-                      <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
-                        <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
-                        <div v-else-if="item.kind === 'chart'" class="chart-card">
-                          <div class="card-head">
-                            <span class="kind-icon"><el-icon><TrendCharts /></el-icon></span>
-                            <span class="process-title">{{ item.chart?.title || t('AIAGENT.CHART.TITLE') }}</span>
-                            <el-tooltip v-if="canDownloadChart(item)" :content="t(item.chart?.chart_type === 'table' ? 'AIAGENT.CHART.DOWNLOAD_TABLE' : 'AIAGENT.CHART.DOWNLOAD')">
-                              <button class="card-action" type="button" :aria-label="t(item.chart?.chart_type === 'table' ? 'AIAGENT.CHART.DOWNLOAD_TABLE' : 'AIAGENT.CHART.DOWNLOAD')" @click.stop="downloadChart(message, item)"><el-icon><Download /></el-icon></button>
-                            </el-tooltip>
-                          </div>
-                          <div :id="`chart-${message.id}-${item.id}`" class="chart-block-body">
-                            <p v-if="item.chart?.summary" class="chart-summary">{{ item.chart.summary }}</p>
-                            <div v-if="item.chart?.chart_type === 'table' && item.chart?.table_data" class="chart-table-scroll">
-                              <table class="chart-table">
-                                <thead><tr><th v-for="(head, hi) in item.chart.table_data.headers" :key="hi">{{ head }}</th></tr></thead>
-                                <tbody>
-                                  <tr v-for="(row, ri) in item.chart.table_data.rows" :key="ri">
-                                    <td v-for="(cell, ci) in row" :key="ci" :class="{ num: typeof cell === 'number' }">{{ typeof cell === 'number' ? cell.toLocaleString() : cell }}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                            <ChartView v-else-if="item.chart?.series && item.chart.series.length" :ref="el => { setChartRef(chartKey(message, item), el); }" :content="item.chart" />
-                            <p v-else class="quiet">{{ t('AIAGENT.CHART.NO_DATA') }}</p>
-                            <p v-if="item.chart?.total != null" class="chart-meta">{{ t('AIAGENT.CHART.RECORDS', { total: item.chart.total, displayed: item.chart.displayed ?? item.chart.total }) }}</p>
-                          </div>
                         </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
+                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
+                    <div v-else-if="item.kind === 'chart'" class="result-card">
+                      <div class="result-head">
+                        <strong>{{ item.chart?.title || t('AIAGENT.CHART.TITLE') }}</strong>
+                        <div v-if="item.chart?.chart_type !== 'table' && chartHasData(item.chart)" class="segmented" role="tablist">
+                          <button type="button" role="tab" :aria-selected="chartMode(message, item) === 'chart'" :class="{ active: chartMode(message, item) === 'chart' }" @click="chartModes.set(chartKey(message, item), 'chart')"><el-icon><ChartLineIcon /></el-icon>{{ uiCopy.chart }}</button>
+                          <button type="button" role="tab" :aria-selected="chartMode(message, item) === 'data'" :class="{ active: chartMode(message, item) === 'data' }" @click="chartModes.set(chartKey(message, item), 'data')"><el-icon><TableIcon /></el-icon>{{ uiCopy.data }}</button>
+                        </div>
+                        <el-tooltip v-if="canDownloadChart(item)" :content="t(chartMode(message, item) === 'data' ? 'AIAGENT.CHART.DOWNLOAD_TABLE' : 'AIAGENT.CHART.DOWNLOAD')">
+                          <button class="icon-button" type="button" :aria-label="t(chartMode(message, item) === 'data' ? 'AIAGENT.CHART.DOWNLOAD_TABLE' : 'AIAGENT.CHART.DOWNLOAD')" @click.stop="downloadCurrent(message, item)"><el-icon><Download /></el-icon></button>
+                        </el-tooltip>
                       </div>
-                      <p v-if="message.status === 'completed' && !bodyEntries(message).length" class="quiet">{{ t('AIAGENT.STATUS.NO_ANSWER') }}</p>
-                      <p v-if="message.status === 'stopped'" class="quiet">{{ t('AIAGENT.STATUS.STOPPED_NOTE') }}</p>
-                      <div v-if="message.errorKey" class="error-card" role="alert"><el-icon><Warning /></el-icon><div><strong>{{ t(message.errorKey) }}</strong><p v-if="message.errorDetail">{{ message.errorDetail }}</p></div></div>
-                    </template>
+                      <div class="result-body">
+                        <p v-if="item.chart?.summary" class="result-summary">{{ item.chart.summary }}</p>
+                        <template v-if="chartHasData(item.chart)">
+                          <ChartView v-if="item.chart?.chart_type !== 'table'" v-show="chartMode(message, item) === 'chart'" :ref="el => { setChartRef(chartKey(message, item), el); }" :content="item.chart" />
+                          <div v-if="chartMode(message, item) === 'data' && chartTable(item.chart)" class="data-table-scroll">
+                            <table class="data-table">
+                              <thead><tr><th v-for="(head, hi) in chartTable(item.chart)!.headers" :key="hi" :class="{ num: numericColumn(chartTable(item.chart)!, hi) }">{{ head }}</th></tr></thead>
+                              <tbody><tr v-for="(row, ri) in chartTable(item.chart)!.rows" :key="ri"><td v-for="(cell, ci) in row" :key="ci" :class="{ num: typeof cell === 'number' }">{{ formatCell(cell) }}</td></tr></tbody>
+                            </table>
+                          </div>
+                        </template>
+                        <p v-else class="result-empty">{{ t('AIAGENT.CHART.NO_DATA') }}</p>
+                      </div>
+                      <div v-if="item.chart?.total != null" class="result-foot">{{ t('AIAGENT.CHART.RECORDS', { total: item.chart.total, displayed: item.chart.displayed ?? item.chart.total }) }}</div>
+                    </div>
                   </div>
-                  <div v-if="message.role === 'user'" class="question-actions">
-                    <el-tooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')"><button type="button" class="utility-button" :disabled="streaming || attachmentReading" :aria-label="t('AIAGENT.BUTTON.EDIT_QUESTION')" @click="editQuestion(message)"><el-icon><EditPen /></el-icon></button></el-tooltip>
+                  <p v-if="message.status === 'completed' && !bodyEntries(message).length" class="note">{{ t('AIAGENT.STATUS.NO_ANSWER') }}</p>
+                  <p v-if="message.status === 'stopped'" class="note">{{ t('AIAGENT.STATUS.STOPPED_NOTE') }}</p>
+                  <div v-if="message.errorKey" class="error-card" role="alert"><el-icon><Warning /></el-icon><div><strong>{{ t(message.errorKey) }}</strong><p v-if="message.errorDetail">{{ message.errorDetail }}</p></div></div>
+                  <div v-if="!isActive(message)" class="answer-actions">
+                    <el-tooltip :content="t(copiedMessageId === message.id ? 'AIAGENT.COPY.SUCCESS' : 'AIAGENT.BUTTON.COPY')"><button type="button" class="icon-button small" :disabled="!answerText(message)" :aria-label="t('AIAGENT.BUTTON.COPY')" @click="copyAnswer(message)"><el-icon><component :is="copiedMessageId === message.id ? Check : CopyDocument" /></el-icon></button></el-tooltip>
+                    <!-- 反馈仅保存在本机，不声称已提交服务端；复用 YES / NOT 键。 -->
+                    <el-tooltip :content="t('CM.COMMON.YES')"><button type="button" class="icon-button small" :class="{ selected: feedback.get(message.id) === 'up' }" :aria-label="t('CM.COMMON.YES')" :aria-pressed="feedback.get(message.id) === 'up'" @click="setFeedback(message, 'up')"><FeedbackIcon /></button></el-tooltip>
+                    <el-tooltip :content="t('CM.COMMON.NOT')"><button type="button" class="icon-button small" :class="{ selected: feedback.get(message.id) === 'down' }" :aria-label="t('CM.COMMON.NOT')" :aria-pressed="feedback.get(message.id) === 'down'" @click="setFeedback(message, 'down')"><FeedbackIcon down /></button></el-tooltip>
+                    <el-tooltip v-if="canRegenerate(message)" :content="t('AIAGENT.BUTTON.REGENERATE')"><button type="button" class="icon-button small" :disabled="streaming" :aria-label="t('AIAGENT.BUTTON.REGENERATE')" @click="regenerate(message)"><el-icon><RefreshRight /></el-icon></button></el-tooltip>
                   </div>
-                  <div v-if="message.role === 'assistant' && !isActive(message)" class="message-actions">
-                    <el-button text size="small" :icon="CopyDocument" :disabled="!answerText(message)" @click="copyAnswer(message)">{{ t(copiedMessageId === message.id ? 'AIAGENT.COPY.SUCCESS' : 'AIAGENT.BUTTON.COPY') }}</el-button>
-                    <!-- 反馈仅保存在本机，不声称已提交服务端；复用 YES / NOT 键，不新增语言包键。 -->
-                    <el-tooltip :content="t('CM.COMMON.YES')"><button type="button" class="utility-button feedback-button" :class="{ selected: feedback.get(message.id) === 'up' }" :aria-label="t('CM.COMMON.YES')" :aria-pressed="feedback.get(message.id) === 'up'" @click="setFeedback(message, 'up')"><FeedbackIcon /></button></el-tooltip>
-                    <el-tooltip :content="t('CM.COMMON.NOT')"><button type="button" class="utility-button feedback-button" :class="{ selected: feedback.get(message.id) === 'down' }" :aria-label="t('CM.COMMON.NOT')" :aria-pressed="feedback.get(message.id) === 'down'" @click="setFeedback(message, 'down')"><FeedbackIcon down /></button></el-tooltip>
-                    <el-button v-if="canRegenerate(message)" text size="small" :icon="RefreshRight" :disabled="streaming" @click="regenerate(message)">{{ t('AIAGENT.BUTTON.REGENERATE') }}</el-button>
-                  </div>
-                </div>
+                </template>
               </article>
             </div>
           </el-scrollbar>
-          <el-button v-if="messages.length && !following" class="back-bottom" round :icon="ArrowDown" @click="jumpToBottom"><span v-if="streaming" class="bottom-generating">{{ t('AIAGENT.STATUS.ANSWER') }} · </span>{{ t('AIAGENT.BUTTON.BOTTOM') }}</el-button>
+
+          <!-- 右侧提问导航：悬停展开列表，点击定位 -->
+          <nav v-if="questionEntries.length > 1" class="question-nav" :aria-label="uiCopy.questions">
+            <div class="nav-rail" aria-hidden="true"><i v-for="entry in questionEntries" :key="entry.id" :class="{ active: entry.id === activeQuestionId }" /></div>
+            <div class="nav-panel">
+              <p>{{ uiCopy.questions }}</p>
+              <button v-for="entry in questionEntries" :key="entry.id" type="button" :class="{ active: entry.id === activeQuestionId }" @click="jumpToMessage(entry.id)">
+                <i aria-hidden="true" /><span>{{ entry.content }}</span><time>{{ formatTime(entry.createdAt) }}</time>
+              </button>
+            </div>
+          </nav>
+          <el-tooltip v-if="!following" :content="t('AIAGENT.BUTTON.BOTTOM')"><button class="to-bottom" type="button" :aria-label="t('AIAGENT.BUTTON.BOTTOM')" @click="jumpToBottom"><el-icon><ArrowDown /></el-icon></button></el-tooltip>
         </div>
+
+        <!-- 输入区 -->
         <footer class="composer-region">
-          <div class="composer" :class="{ 'is-streaming': streaming, 'has-attachments': draftAttachments.length }" @paste="onAttachmentPaste">
-            <!-- DOCX / XLSX 在本地提取文本与表格；仍通过现有 message.content 发送，无新增上传接口。 -->
+          <div class="composer" :class="{ 'is-streaming': streaming }" @paste="onAttachmentPaste">
+            <!-- DOCX / XLSX / PDF / PPTX 在本地提取文本；仍通过现有 message.content 发送，无新增上传接口。 -->
             <input ref="attachmentInput" hidden type="file" :accept="ATTACHMENT_ACCEPT" multiple tabindex="-1" :aria-label="attachmentCopy.add" @change="onAttachmentChoose" />
+            <div v-if="editingMessageId" class="composer-editing"><span><el-icon><EditPen /></el-icon>{{ t('AIAGENT.BUTTON.EDIT_QUESTION') }}</span><button type="button" class="icon-button small" :aria-label="t('AIAGENT.BUTTON.CANCEL')" :title="t('AIAGENT.BUTTON.CANCEL')" @click="cancelQuestionEdit"><el-icon><Close /></el-icon></button></div>
             <div v-if="draftAttachments.length" class="attachment-list">
-              <div v-for="file in draftAttachments" :key="file.id" class="attachment-chip">
-                <button type="button" class="attachment-preview" :title="file.name" @click="attachmentPreview = file"><el-icon><Document /></el-icon><span>{{ file.name }}</span></button>
-                <button type="button" class="attachment-remove" :aria-label="`${t('CM.COMMON.DELETE')} ${file.name}`" :title="t('CM.COMMON.DELETE')" @click="removeAttachment(file.id)"><el-icon><Close /></el-icon></button>
+              <div v-for="file in draftAttachments" :key="file.id" class="file-chip removable">
+                <button type="button" class="file-open" :title="file.name" @click="attachmentPreview = file"><el-icon><Document /></el-icon><span>{{ file.name }}</span></button>
+                <button type="button" class="file-remove" :aria-label="`${t('CM.COMMON.DELETE')} ${file.name}`" :title="t('CM.COMMON.DELETE')" @click="removeAttachment(file.id)"><el-icon><Close /></el-icon></button>
               </div>
             </div>
-            <p v-if="attachmentError" class="attachment-error" role="alert">{{ attachmentError }}<button type="button" :aria-label="t('CM.COMMON.CLOSE')" @click="attachmentErrors.delete(activeId)"><el-icon><Close /></el-icon></button></p>
-            <div v-if="editingMessageId" class="composer-editing"><span><el-icon><EditPen /></el-icon>{{ t('AIAGENT.BUTTON.EDIT_QUESTION') }}</span><button type="button" class="utility-button" :aria-label="t('AIAGENT.BUTTON.CANCEL')" :title="t('AIAGENT.BUTTON.CANCEL')" @click="cancelQuestionEdit"><el-icon><Close /></el-icon></button></div>
-            <el-input ref="inputRef" v-model="draft" type="textarea" resize="none" :autosize="{ minRows: 2, maxRows: 6 }" :placeholder="t('AIAGENT.INPUT.PLACEHOLDER')" :aria-label="t('AIAGENT.INPUT.LABEL')" @keydown="onInputKeydown" />
+            <p v-if="attachmentError" class="attachment-error" role="alert"><span>{{ attachmentError }}</span><button type="button" class="icon-button small" :aria-label="t('CM.COMMON.CLOSE')" @click="attachmentErrors.delete(activeId)"><el-icon><Close /></el-icon></button></p>
+            <el-input ref="inputRef" v-model="draft" type="textarea" resize="none" :autosize="{ minRows: messages.length ? 1 : 2, maxRows: 8 }" :placeholder="t('AIAGENT.INPUT.PLACEHOLDER')" :aria-label="t('AIAGENT.INPUT.LABEL')" @keydown="onInputKeydown" />
             <div class="composer-toolbar">
-              <div class="composer-tools">
-                <!-- 用户确认的新文案由本组件随 locale 提供；不新增外部语言包键。 -->
-                <el-tooltip placement="top-start" effect="light" :trigger="['hover', 'focus']">
-                  <template #content><div class="attachment-limits">{{ attachmentCopy.limits }}</div></template>
-                  <el-button text :icon="Paperclip" :disabled="attachmentReading" :aria-label="attachmentCopy.add" @click="attachmentInput?.click()">{{ attachmentCopy.add }}<span v-if="draftAttachments.length" class="attachment-count">{{ draftAttachments.length }}</span></el-button>
-                </el-tooltip>
-                <!-- 用户选择简短说明：悬停或键盘聚焦显示，随 locale 切换，不增加外部 t() 键。 -->
-                <el-tooltip placement="top-start" effect="light" :trigger="['hover', 'focus']" :show-after="100" :hide-after="100">
-                  <template #content><div class="attachment-format-hint">{{ attachmentCopy.formatsSummary }}</div></template>
-                  <button type="button" class="attachment-info" :aria-label="attachmentCopy.formatsTitle"><el-icon><InfoFilled /></el-icon></button>
-                </el-tooltip>
-                <span v-if="attachmentReading" role="status">{{ t('CM.COMMON.UPLOADING_FILE') }}</span>
-                <span v-else-if="streaming" class="next-draft">{{ t('AIAGENT.INPUT.NEXT_DRAFT') }}</span>
-              </div>
-              <el-button v-if="streaming" class="stop-button" :icon="VideoPause" @click="stopGeneration">{{ t('AIAGENT.BUTTON.STOP') }}</el-button>
-              <el-button v-else class="send-button" type="primary" :icon="editingMessageId ? RefreshRight : Top" :aria-label="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" :title="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" :disabled="!draft.trim() || attachmentReading" @click="sendMessage" />
+              <el-tooltip placement="top-start" :trigger="['hover', 'focus']">
+                <template #content><div class="tooltip-text">{{ attachmentCopy.limits }}<br />{{ attachmentCopy.formatsSummary }}</div></template>
+                <button type="button" class="attach-button" :disabled="attachmentReading" :aria-label="attachmentCopy.add" @click="attachmentInput?.click()"><el-icon><Paperclip /></el-icon><span>{{ attachmentCopy.add }}</span><em v-if="draftAttachments.length">{{ draftAttachments.length }}</em></button>
+              </el-tooltip>
+              <span v-if="attachmentReading" class="composer-hint" role="status">{{ t('CM.COMMON.UPLOADING_FILE') }}</span>
+              <span v-else-if="streaming" class="composer-hint">{{ t('AIAGENT.INPUT.NEXT_DRAFT') }}</span>
+              <span class="spacer" />
+              <el-tooltip v-if="streaming" :content="t('AIAGENT.BUTTON.STOP')"><button type="button" class="send-button stop" :aria-label="t('AIAGENT.BUTTON.STOP')" @click="stopGeneration()"><el-icon><StopIcon /></el-icon></button></el-tooltip>
+              <el-tooltip v-else :content="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')"><button type="button" class="send-button" :disabled="!draft.trim() || attachmentReading" :aria-label="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" @click="sendMessage"><el-icon><component :is="editingMessageId ? RefreshRight : Top" /></el-icon></button></el-tooltip>
             </div>
           </div>
+          <div v-if="!messages.length" class="examples">
+            <button v-for="example in welcomeExamples" :key="example.key" type="button" class="example" :title="t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`))">
+              <span class="example-icon" aria-hidden="true"><el-icon><component :is="example.icon" /></el-icon></span>
+              <span class="example-text"><strong>{{ t(`AIAGENT.EXAMPLE.${example.key}.TITLE`) }}</strong><span>{{ t(`AIAGENT.EXAMPLE.${example.key}.DESCRIPTION`) }}</span></span>
+              <el-icon class="example-arrow" aria-hidden="true"><ArrowRight /></el-icon>
+            </button>
+          </div>
         </footer>
+        <p class="disclaimer">{{ uiCopy.disclaimer }}</p>
       </main>
     </div>
     <el-dialog :model-value="!!attachmentPreview" :title="attachmentPreview?.name || t('CM.COMMON.PREVIEW')" width="min(760px, 92vw)" :append-to-body="false" @update:model-value="value => { if (!value) attachmentPreview = null; }">
@@ -252,8 +237,8 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElButton, ElInput, ElIcon, ElTooltip, ElEmpty, ElScrollbar, ElDrawer, ElDialog, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
-import { ArrowDown, ArrowRight, ChatLineRound, Grid, Histogram, Right, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, Fold, InfoFilled, Loading, Operation, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
+import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
+import { ArrowDown, ArrowRight, Check, ChatLineRound, Grid, Histogram, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
 import { merge, cloneDeep } from 'lodash-es';
@@ -300,6 +285,22 @@ const SkillIcon = defineComponent({
     h('path', { d: 'M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z' }),
   ]),
 });
+// 展示层线性图标（Lucide 图形，ISC License，© Lucide Contributors），只内联用到的几枚。
+const lineIcon = (paths: string[], strokeWidth = 1.6) => defineComponent({
+  setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', fill: 'none', stroke: 'currentColor', 'stroke-width': strokeWidth, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, paths.map(d => h('path', { d }))),
+});
+const CloudIcon = lineIcon(['M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z']);
+const BotIcon = lineIcon(['M12 8V4H8', 'M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M2 14h2', 'M20 14h2', 'M15 13v2', 'M9 13v2']);
+const WrenchIcon = lineIcon(['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z']);
+const PanelIcon = lineIcon(['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M9 3v18']);
+const ChartLineIcon = lineIcon(['M3 3v16a2 2 0 0 0 2 2h16', 'm19 9-5 5-4-4-3 3']);
+const TableIcon = lineIcon(['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M3 9h18', 'M9 9v12']);
+const MoreIcon = lineIcon(['M12 12h.01', 'M19 12h.01', 'M5 12h.01'], 2.4);
+const ChevronIcon = lineIcon(['m6 9 6 6 6-6']);
+const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
+const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
+// 品牌标识：静止的四方块；生成时同一组方块以折叠动画出现在状态行（ActivityMark）。
+const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
 // 用户已确认的单枚折叠标识：沿用示例的形变轨迹和 5.6 秒节奏；不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
@@ -957,9 +958,6 @@ const draft = computed({ get: () => current.value.draft, set: value => { current
 
 // 会话定位和快捷键仅改变本地展示。
 const historySearchRef = ref<InputInstance>();
-const historySearchPending = ref(false);
-const outlineButton = ref<HTMLButtonElement>();
-const outlineOpen = ref(false);
 const locatedMessageId = ref(''), copiedMessageId = ref('');
 let locatedTimer: ReturnType<typeof setTimeout> | undefined, copiedTimer: ReturnType<typeof setTimeout> | undefined;
 const questionEntries = computed(() => messages.value.filter(message => message.role === 'user'));
@@ -968,7 +966,6 @@ function rememberReadingPosition() {
   const wrap = scrollRef.value?.wrapRef;
   if (wrap) readingPositions.set(activeId.value, { top: wrap.scrollTop, following: following.value });
 }
-function closeOutline() { outlineOpen.value = false; void nextTick(() => outlineButton.value?.focus()); }
 async function jumpToMessage(id: string) {
   following.value = false;
   await nextTick();
@@ -988,11 +985,7 @@ async function openHistoryResult(chat: Conversation) {
   const match = query ? chat.messages.find(message => messageMatches(message, query)) : undefined;
   if (match) { if (match.role === 'assistant') traceOverride.set(match.id, true); await jumpToMessage(match.id); }
 }
-function onHistoryDrawerOpened() {
-  if (historySearchPending.value) { historySearchPending.value = false; historySearchRef.value?.focus(); }
-}
 async function focusHistorySearch() {
-  if (mobile.value && !drawerOpen.value) { historySearchPending.value = true; drawerOpen.value = true; return; }
   sidebarOpen.value = true;
   await nextTick(); historySearchRef.value?.focus();
 }
@@ -1008,7 +1001,6 @@ function onWorkspaceKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); void focusHistorySearch(); }
   else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') { event.preventDefault(); newConversation(); }
   else if (event.shiftKey && event.key === 'Escape') { event.preventDefault(); inputRef.value?.focus(); }
-  else if (event.key === 'Escape' && outlineOpen.value) { event.preventDefault(); closeOutline(); }
 }
 async function copyAnswer(message: ChatMessage) {
   if (await copyText(answerText(message))) { copiedMessageId.value = message.id; clearTimeout(copiedTimer); copiedTimer = setTimeout(() => { copiedMessageId.value = ''; }, 1800); }
@@ -1016,8 +1008,6 @@ async function copyAnswer(message: ChatMessage) {
 
 const following = ref(true);
 const sidebarOpen = ref(true);
-const drawerOpen = ref(false);
-const mobile = ref(false);
 const reducedMotion = ref(false);
 const now = ref(Date.now());
 const scrollRef = ref<ScrollbarInstance>();
@@ -1065,6 +1055,132 @@ const attachmentCopy = computed(() => locale.value.toLowerCase().startsWith('zh'
 const attachmentHint = computed(() => attachmentCopy.value.formats);
 // 起始页示例卡片：顺序与语言包键对应，图标仅作展示。
 const welcomeExamples = [{ key: 'ONE', icon: Histogram }, { key: 'TWO', icon: TrendCharts }, { key: 'THREE', icon: Grid }];
+// ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
+// 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
+const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
+  searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
+  done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
+  questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
+  steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
+} : {
+  searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
+  done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
+  questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
+  steps: { thinking: 'Thinking', skill: 'Skills', agent: 'Agents', tool: 'Tools' },
+});
+// 历史分组：收藏置顶，其余按最近更新时间分为今天 / 近 7 天 / 更早。
+const historyGroups = computed(() => {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const today = start.getTime(), week = today - 6 * 86_400_000;
+  return [
+    { key: 'favorites', label: t('AIAGENT.HISTORY.FAVORITES'), items: pinned.value },
+    { key: 'today', label: uiCopy.value.today, items: unpinned.value.filter(c => c.updatedAt >= today) },
+    { key: 'week', label: uiCopy.value.week, items: unpinned.value.filter(c => c.updatedAt < today && c.updatedAt >= week) },
+    { key: 'earlier', label: uiCopy.value.earlier, items: unpinned.value.filter(c => c.updatedAt < week) },
+  ].filter(group => group.items.length);
+});
+function onChatCommand(chat: Conversation, command: string) {
+  if (command === 'favorite') toggleFavorite(chat);
+  else if (command === 'rename') void renameConversation(chat);
+  else if (command === 'delete') void deleteConversation(chat);
+}
+// 右侧提问导航：按滚动位置高亮当前所读的提问。
+const activeQuestionId = ref('');
+function updateActiveQuestion() {
+  const wrap = scrollRef.value?.wrapRef;
+  const entries = questionEntries.value;
+  if (!wrap || !entries.length) { activeQuestionId.value = ''; return; }
+  if (wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 8) { activeQuestionId.value = entries[entries.length - 1].id; return; }
+  const top = wrap.getBoundingClientRect().top + 96;
+  let id = entries[0].id;
+  for (const entry of entries) {
+    const el = document.getElementById(`chat-message-${entry.id}`);
+    if (el && el.getBoundingClientRect().top <= top) id = entry.id;
+  }
+  activeQuestionId.value = id;
+}
+watch(() => [activeId.value, questionEntries.value.length], () => { void nextTick(updateActiveQuestion); });
+function onMessageScroll() { onScroll(); updateActiveQuestion(); }
+// ---- 执行过程：每个 SSE 过程项渲染为一行步骤 ----
+type StepGroup = 'thinking' | 'skill' | 'agent' | 'tool' | 'data';
+function stepGroup(item: ProcessItem): StepGroup {
+  if (item.kind === 'text') return 'thinking';
+  if (item.kind === 'subagent') return 'agent';
+  if (item.kind === 'tool') return item.skillLoad ? 'skill' : 'tool';
+  return 'data';
+}
+const stepIcons: Record<StepGroup, unknown> = { thinking: CloudIcon, skill: SkillIcon, agent: BotIcon, tool: WrenchIcon, data: Document };
+function stepIcon(item: ProcessItem) { return stepIcons[stepGroup(item)]; }
+function stepName(item: ProcessItem) {
+  if (item.kind === 'tool' && item.skillLoad) return t('AIAGENT.PROCESS.SKILL_LOADED', { name: skillLabel(item.toolName) });
+  return processTitle(item);
+}
+function plainLine(value: string, last = false) {
+  const lines = value.split('\n').map(line => line.replace(/^[#>\-*\s]+|[`*_]/g, '').trim()).filter(Boolean);
+  return (last ? lines[lines.length - 1] : lines[0]) || '';
+}
+function stepPreview(message: ChatMessage, item: ProcessItem) {
+  const live = isActive(message) && item.status === 'running';
+  if (item.kind === 'text') return plainLine(item.text, live);
+  if (item.kind === 'subagent') return plainLine(item.answer || item.thinking, true);
+  if (item.kind === 'tool' && !item.skillLoad) return toolFacts(item).filter(fact => fact.label !== t('AIAGENT.PROCESS.SKILL') && fact.label !== t('AIAGENT.PROCESS.STATUS') && fact.label !== t('AIAGENT.PROCESS.DURATION_LABEL')).map(fact => `${fact.label}: ${fact.value}`).join('  ');
+  return '';
+}
+function stepTime(message: ChatMessage, item: ProcessItem) {
+  if (item.kind === 'text' || item.kind === 'chart' || item.kind === 'json') return '';
+  const ms = Math.round(Math.max(0, item.duration ?? now.value - item.startTime));
+  return ms < 1000 ? t('AIAGENT.PROCESS.DURATION', { ms }) : t('AIAGENT.STATUS.ELAPSED', { seconds: (ms / 1000).toFixed(ms < 10_000 ? 2 : 1) });
+}
+function stepExpandable(item: ProcessItem) {
+  if (item.kind === 'text') return !!item.text.trim();
+  if (item.kind === 'tool') return !item.skillLoad;
+  return true;
+}
+const stepOverride = reactive(new Map<string, boolean>());
+function stepOpen(message: ChatMessage, item: ProcessItem) {
+  const manual = stepOverride.get(chartKey(message, item));
+  if (manual !== undefined) return manual;
+  // 默认只展开“正在输出”的思考 / 子智能体，以及出错的步骤。
+  return item.status === 'error' || (isActive(message) && item.status === 'running' && (item.kind === 'text' || item.kind === 'subagent'));
+}
+function toggleStep(message: ChatMessage, item: ProcessItem) { stepOverride.set(chartKey(message, item), !stepOpen(message, item)); }
+function stepCounts(message: ChatMessage) {
+  const counts: Partial<Record<StepGroup, number>> = {};
+  layout(message).timeline.forEach(item => { const group = stepGroup(item); counts[group] = (counts[group] || 0) + 1; });
+  return (['thinking', 'skill', 'agent', 'tool'] as const).filter(group => counts[group]).map(group => ({ group, count: counts[group]!, icon: stepIcons[group], label: uiCopy.value.steps[group] }));
+}
+function liveStepName(message: ChatMessage) {
+  const item = message.process.filter(p => (p.kind === 'tool' || p.kind === 'subagent') && p.status === 'running').pop();
+  return item ? (item.kind === 'tool' && item.skillLoad ? skillLabel(item.toolName) : processTitle(item)) : '';
+}
+function summaryLabel(message: ChatMessage) {
+  const label = message.status === 'completed' ? uiCopy.value.done : t(statusKeys[message.status]);
+  return message.finishedAt ? `${label} · ${uiCopy.value.usedTime(((message.finishedAt - message.createdAt) / 1000).toFixed(1))}` : label;
+}
+// ---- 图表卡片：图表 / 数据两种视图，下载跟随当前视图 ----
+const chartModes = reactive(new Map<string, 'chart' | 'data'>());
+function chartMode(message: ChatMessage, item: ProcessItem) { return item.chart?.chart_type === 'table' ? 'data' : chartModes.get(chartKey(message, item)) || 'chart'; }
+function chartTable(chart?: ChartContent): { headers: string[]; rows: (string | number)[][] } | undefined {
+  if (!chart) return undefined;
+  if (chart.chart_type === 'table') return chart.table_data ? { headers: chart.table_data.headers.map(String), rows: chart.table_data.rows as (string | number)[][] } : undefined;
+  const series = chart.series ?? [];
+  if (!series.length) return undefined;
+  const xs: (string | number)[] = [];
+  series.forEach(s => s.data.forEach(d => { if (!xs.includes(d.x)) xs.push(d.x); }));
+  const maps = series.map(s => new Map(s.data.map(d => [d.x, d.y])));
+  return { headers: [chart.x_label || uiCopy.value.dimension, ...series.map(s => s.name || chart.y_label || '')], rows: xs.map(x => [x, ...maps.map(m => m.get(x) ?? '')]) };
+}
+function numericColumn(table: { rows: (string | number)[][] }, index: number) { return table.rows.length > 0 && table.rows.every(row => typeof row[index] === 'number' || row[index] === '' || row[index] == null); }
+function formatCell(value: unknown) { return typeof value === 'number' ? value.toLocaleString(locale.value.startsWith('zh') ? 'zh-CN' : 'en-US', { maximumFractionDigits: 6 }) : value == null ? '' : String(value); }
+async function downloadCurrent(message: ChatMessage, item: ProcessItem) {
+  const chart = item.chart;
+  if (!chart) return;
+  if (chart.chart_type === 'table' || chartMode(message, item) === 'chart') { await downloadChart(message, item); return; }
+  const table = chartTable(chart);
+  if (!table) return;
+  const rows = [table.headers.map(csvCell).join(','), ...table.rows.map(row => row.map(csvCell).join(','))];
+  saveBlob(new Blob([`\ufeff${rows.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }), chartFileName(chart, 'csv'));
+}
 function removeAttachment(id: string) { current.value.attachments = draftAttachments.value.filter(file => file.id !== id); scheduleSave(); }
 async function addAttachments(files: File[]) {
   const chat = current.value;
@@ -1165,23 +1281,22 @@ function finishText(message: ChatMessage) {
   if (!message.finishedAt) return '';
   return t('AIAGENT.MESSAGE.DONE_AT', { time: new Intl.DateTimeFormat(locale.value.startsWith('zh') ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(message.finishedAt), seconds: ((message.finishedAt - message.createdAt) / 1000).toFixed(1) });
 }
-function toggleSidebar() { if (mobile.value) drawerOpen.value = !drawerOpen.value; else sidebarOpen.value = !sidebarOpen.value; }
+function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
 function newConversation() {
-  rememberReadingPosition(); outlineOpen.value = false;
+  rememberReadingPosition();
   historyQuery.value = '';
   // 不再打断正在跑的回答：并发下其它会话的请求独立存活，切回来还能继续看。
   conversations.value = conversations.value.filter(c => c.messages.length || c.title || c.draft || c.attachments?.length);
   const chat = makeConversation(); conversations.value.unshift(chat); activeId.value = chat.id;
-  drawerOpen.value = false; following.value = true; persistHistory();
+  following.value = true; persistHistory();
   void nextTick(() => inputRef.value?.focus());
 }
 function switchConversation(id: string) {
   if (id !== activeId.value && conversations.value.some(c => c.id === id)) {
-    rememberReadingPosition(); outlineOpen.value = false; locatedMessageId.value = '';
+    rememberReadingPosition(); locatedMessageId.value = '';
     activeId.value = id; const position = readingPositions.get(id); following.value = position?.following ?? true; persistHistory();
     void nextTick(() => { if (activeId.value !== id) return; if (following.value) scheduleScroll(); else scrollRef.value?.setScrollTop(position?.top || 0); });
   }
-  drawerOpen.value = false;
 }
 function toggleFavorite(chat: Conversation) {
   chat.favorite = !chat.favorite;
@@ -1281,7 +1396,8 @@ function layout(message: ChatMessage): MessageLayout {
 const traceOverride = reactive(new Map<string, boolean>());
 function traceOpen(message: ChatMessage) {
   const manual = traceOverride.get(message.id);
-  return manual === undefined ? false : manual;
+  // 生成中自动展开、结束后收起；用户手动展开/收起后以用户选择为准。
+  return manual === undefined ? isActive(message) : manual;
 }
 function toggleTrace(message: ChatMessage) {
   traceOverride.set(message.id, !traceOpen(message));
@@ -1438,6 +1554,13 @@ function onProcessClick(event: MouseEvent) {
     if (message) { event.stopPropagation(); toggleTrace(message); }
     return;
   }
+  const step = event.target.closest<HTMLButtonElement>('button.step-row[data-message-id][data-process-id]');
+  if (step) {
+    const message = findMessage(step.dataset.messageId);
+    const item = message?.process.find(value => String(value.id) === step.dataset.processId);
+    if (message && item) { event.stopPropagation(); toggleStep(message, item); }
+    return;
+  }
   const button = event.target.closest<HTMLButtonElement>('button.process-summary[data-message-id][data-process-id]');
   if (!button || button.disabled || !processEventRoot.contains(button)) return;
   const message = findMessage(button.dataset.messageId);
@@ -1590,44 +1713,42 @@ function scatterMerge(chartData: ChartContent): Record<string, unknown> {
   }
   return merge(cloneDeep(scatterOption), option);
 }
-// 展示层图表主题：只在 dealChart 结果上叠加视觉样式，不改变数据、系列与坐标含义。
+// 展示层图表主题（企业风格）：只在 dealChart 结果上叠加样式，不改变数据、系列与坐标含义。
 // 卡片标题已显示图表名，画布内标题仅在下载 PNG 时临时显示。
-const chartPalette = ['#3b6cff', '#14b8a6', '#f59e0b', '#f0627a', '#8b5cf6', '#0ea5e9', '#64748b', '#d97757'];
-const hexAlpha = (hex: string, alpha: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`; };
-const vGradient = (from: string, to: string) => ({ type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }] });
+const chartPalette = ['#1664ff', '#14c9c9', '#f7ba1e', '#722ed1', '#f77234', '#3491fa', '#9fdb1d', '#f5319d'];
 const asArray = <T,>(value: T | T[] | undefined): T[] => (value == null ? [] : Array.isArray(value) ? value : [value]);
 function polishChartOption(option: Record<string, unknown>, type: ChartType) {
-  const muted = '#8a93a3';
-  option.color = chartPalette;
-  option.textStyle = { fontFamily: 'PingFang SC, HarmonyOS Sans SC, Huawei Sans, Microsoft YaHei, Arial, sans-serif', color: '#5b6576' };
-  option.title = merge(cloneDeep(option.title ?? {}), { show: false, top: 4, textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2633' } });
-  option.tooltip = merge(cloneDeep(option.tooltip ?? {}), {
-    backgroundColor: 'rgba(255,255,255,0.97)', borderColor: '#e6eaf2', borderWidth: 1, padding: [10, 14],
-    textStyle: { color: '#1f2633', fontSize: 12 }, extraCssText: 'border-radius:12px;box-shadow:0 12px 32px rgba(31,45,80,.14);',
-    axisPointer: type === 'bar' || type === 'multi-bar' ? { type: 'shadow', shadowStyle: { color: 'rgba(59,108,255,0.06)' } } : { type: 'line', lineStyle: { color: '#c9d4ea', type: 'dashed' } },
-  });
+  const muted = '#86909c';
   const series = asArray(option.series as Record<string, unknown>[]);
-  option.legend = merge(cloneDeep(option.legend ?? {}), { show: type === 'pie' || type === 'ring' || series.length > 1, icon: 'roundRect', itemWidth: 10, itemHeight: 10, itemGap: 18, bottom: 0, textStyle: { color: '#5b6576', fontSize: 12 } });
+  const isPie = type === 'pie' || type === 'ring';
+  option.color = chartPalette;
+  option.textStyle = { fontFamily: 'PingFang SC, Microsoft YaHei, -apple-system, Segoe UI, Arial, sans-serif', color: '#4e5969' };
+  option.title = merge(cloneDeep(option.title ?? {}), { show: false, top: 6, left: 'center', textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2329' } });
+  option.tooltip = merge(cloneDeep(option.tooltip ?? {}), {
+    backgroundColor: '#fff', borderColor: '#e5e6eb', borderWidth: 1, padding: [8, 12], textStyle: { color: '#1f2329', fontSize: 12 },
+    extraCssText: 'border-radius:8px;box-shadow:0 4px 14px rgba(31,35,41,.12);',
+    axisPointer: type === 'bar' || type === 'multi-bar' ? { type: 'shadow', shadowStyle: { color: 'rgba(22,100,255,0.05)' } } : { type: 'line', lineStyle: { color: '#c9cdd4' } },
+  });
+  const showLegend = isPie || series.length > 1;
+  option.legend = merge(cloneDeep(option.legend ?? {}), { show: showLegend, icon: 'circle', itemWidth: 8, itemHeight: 8, itemGap: 20, bottom: 0, textStyle: { color: '#4e5969', fontSize: 12 } });
   if (option.xAxis) {
-    const axisStyle = { axisLine: { lineStyle: { color: '#e3e8f0' } }, axisTick: { show: false }, axisLabel: { color: muted, margin: 12 }, nameTextStyle: { color: muted }, splitLine: { lineStyle: { color: '#eef1f6', type: 'dashed' } } };
-    option.xAxis = asArray(option.xAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), axisStyle, axis.type === 'value' ? {} : { splitLine: { show: false } }));
-    option.yAxis = asArray(option.yAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), axisStyle, { axisLine: { show: false } }));
-    const grid = (option.grid ?? {}) as Record<string, unknown>;
-    option.grid = { ...grid, top: 40, left: 8, right: 24, bottom: (option.legend as Record<string, unknown>).show ? 40 : 8, containLabel: true };
-    if (option.dataZoom) option.grid = { ...(option.grid as Record<string, unknown>), bottom: 64 };
+    const base = { axisTick: { show: false }, axisLabel: { color: muted, fontSize: 11, margin: 10 }, nameTextStyle: { color: muted, fontSize: 11 } };
+    option.xAxis = asArray(option.xAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), base, { axisLine: { show: true, lineStyle: { color: '#e5e6eb' } }, splitLine: { show: axis.type === 'value', lineStyle: { color: '#f2f3f5' } } }));
+    option.yAxis = asArray(option.yAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), base, { axisLine: { show: false }, splitLine: { lineStyle: { color: '#f2f3f5', type: 'solid' } } }));
+    const zoom = !!option.dataZoom;
+    if (zoom) option.dataZoom = (option.dataZoom as Record<string, unknown>[]).map(item => item.type === 'slider' ? { ...item, top: undefined, bottom: showLegend ? 28 : 6, height: 16, borderColor: '#e5e6eb', fillerColor: 'rgba(22,100,255,0.08)', handleStyle: { color: '#fff', borderColor: '#c9cdd4' }, moveHandleSize: 0, textStyle: { color: muted } } : item);
+    option.grid = { top: 28, left: 4, right: 20, bottom: (showLegend ? 28 : 4) + (zoom ? 30 : 0), containLabel: true };
   }
   series.forEach((item, index) => {
     const color = chartPalette[index % chartPalette.length];
     if (item.type === 'line') {
-      const points = asArray(item.data as unknown[]).length;
-      merge(item, { smooth: 0.35, symbol: 'circle', symbolSize: 8, showSymbol: points <= 24, lineStyle: { width: 3, color, shadowColor: hexAlpha(color, 0.25), shadowBlur: 10, shadowOffsetY: 6 }, itemStyle: { color, borderColor: '#fff', borderWidth: 2 }, emphasis: { focus: 'series', scale: 1.6 } });
-      if (series.length <= 2) item.areaStyle = { color: vGradient(hexAlpha(color, 0.22), hexAlpha(color, 0)) };
+      merge(item, { smooth: false, symbol: 'emptyCircle', symbolSize: 6, showSymbol: asArray(item.data as unknown[]).length <= 24, lineStyle: { width: 2 }, emphasis: { focus: 'series' } });
     } else if (item.type === 'bar' || item.type === 'multi-bar') {
-      merge(item, { type: 'bar', barMaxWidth: series.length > 1 ? 22 : 40, itemStyle: { borderRadius: [6, 6, 2, 2], color: vGradient(color, hexAlpha(color, 0.55)) }, emphasis: { focus: 'series', itemStyle: { color } } });
+      merge(item, { type: 'bar', barMaxWidth: series.length > 1 ? 20 : 32, itemStyle: { color, borderRadius: [3, 3, 0, 0] }, emphasis: { focus: 'series' } });
     } else if (item.type === 'pie') {
-      merge(item, { radius: type === 'ring' ? ['46%', '66%'] : ['0%', '64%'], center: ['50%', '46%'], itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: type === 'ring' ? 6 : 4 }, label: { color: '#4b5565', fontSize: 12 }, labelLine: { smooth: true, lineStyle: { color: '#cbd3e1' } }, emphasis: { scaleSize: 6, itemStyle: { shadowBlur: 16, shadowColor: 'rgba(31,45,80,0.18)' } } });
+      merge(item, { radius: type === 'ring' ? ['42%', '62%'] : ['0%', '62%'], center: ['50%', '46%'], itemStyle: { borderColor: '#fff', borderWidth: 2 }, percentPrecision: 1, label: { color: '#4e5969', fontSize: 12, formatter: '{b}  {d}%' }, labelLine: { lineStyle: { color: '#c9cdd4' } } });
     } else if (item.type === 'scatter') {
-      merge(item, { itemStyle: { color: hexAlpha(color, 0.75), borderColor: '#fff', borderWidth: 1 } });
+      merge(item, { symbolSize: 8, itemStyle: { color, opacity: 0.8 } });
     }
   });
   return option;
@@ -2062,8 +2183,8 @@ function copyCode(event: MouseEvent) {
   const code = button?.closest('.code-block')?.querySelector('pre code');
   if (code) void copyText(code.textContent ?? '');
 }
-let narrowQuery: MediaQueryList | undefined, motionQuery: MediaQueryList | undefined;
-function syncMedia() { mobile.value = !!narrowQuery?.matches; reducedMotion.value = !!motionQuery?.matches; if (!mobile.value) drawerOpen.value = false; }
+let motionQuery: MediaQueryList | undefined;
+function syncMedia() { reducedMotion.value = !!motionQuery?.matches; }
 // 离开页面/卸载时要停掉**全部**在跑的请求：并发下可能同时有 2~3 条，
 // 只停当前会话那一条会让其余 fetch 悬挂到空闲超时。
 function stopAll() {
@@ -2075,8 +2196,8 @@ onUnmounted(() => document.removeEventListener('keydown', onPageShortcut));
 onMounted(() => {
   processEventRoot = processRoot.value;
   processEventRoot?.addEventListener('click', onProcessClick, true);
-  narrowQuery = window.matchMedia('(max-width: 767px)'); motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-  syncMedia(); narrowQuery.addEventListener('change', syncMedia); motionQuery.addEventListener('change', syncMedia);
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  syncMedia(); motionQuery.addEventListener('change', syncMedia);
   window.addEventListener('pagehide', onPageHide); scheduleScroll();
 });
 onUnmounted(() => { clearTimeout(locatedTimer); clearTimeout(copiedTimer); });
@@ -2084,546 +2205,342 @@ onUnmounted(() => {
   processEventRoot?.removeEventListener('click', onProcessClick, true);
   processEventRoot = undefined;
   stopAll(); persistHistory(); disposed = true; clearTimeout(saveTimer); clearInterval(elapsedTimer);
-  narrowQuery?.removeEventListener('change', syncMedia); motionQuery?.removeEventListener('change', syncMedia);
+  motionQuery?.removeEventListener('change', syncMedia);
   window.removeEventListener('pagehide', onPageHide);
 });
 </script>
 <style scoped lang="less">
-/* 浅色门户：阅读区留白、轻量分隔与一套控件尺度；不依赖外部样式或字体下载。 */
+/* 企业浅色风格：中性灰 + 主题蓝 #1664FF；仅网页端；不依赖外部字体与样式。 */
 :global(html), :global(body), :global(#app) { height: 100%; width: 100%; min-width: 0; min-height: 0; margin: 0; box-sizing: border-box; }
-.agent-page, .history-panel {
-  --blue: #1677ff; --ink: #252b34; --muted: #737c89; --line: #e6e9ed;
-  --surface: #fff; --surface-soft: #f7f8fa; --hover: #eef1f5; --blue-soft: #eff6ff;
-  --running: #2167c5; --completed: #7a8491; --failed: #b94f57; --stopped: #9a722d;
-  --radius-container: 12px; --radius-card: 10px; --radius-control: 8px;
-  --shadow-float: 0 4px 18px rgba(27,40,59,.09); --content-width: 980px;
-  --el-color-primary: #1677ff;
-  --el-font-family: 'Huawei Sans', Manrope, Arial, 'San Francisco', Helvetica, Roboto, 'Microsoft YaHei', sans-serif;
-  font-family: var(--el-font-family); font-size: 14px; color: var(--ink);
+.agent-page {
+  --blue: #1664ff; --blue-hover: #0e54e0; --blue-soft: #eef3ff;
+  --ink: #1f2329; --ink-2: #373c43; --muted: #646a73; --faint: #8f959e; --disabled: #c9cdd4;
+  --line: #dee0e3; --line-soft: #eff0f1; --fill: #f2f3f5; --fill-soft: #f7f8fa; --hover: #eceef1;
+  --success: #00a870; --danger: #f54a45; --warning: #ff8800;
+  --content-width: 800px;
+  --el-color-primary: #1664ff;
+  --el-font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  height: 100%; width: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: #fff; color: var(--ink); font-family: var(--el-font-family); font-size: 14px;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
-.agent-page { height: 100%; width: 100%; max-width: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border: 0; border-radius: 0; }
 .agent-page, .agent-page *, .agent-page *::before, .agent-page *::after { box-sizing: border-box; }
 .workspace { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
-.history-panel { width: 264px; flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; background: var(--surface-soft); border-right: 1px solid var(--line); }
-.history-content { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.history-brand { display: flex; align-items: center; gap: 12px; padding: 24px 18px 20px; }
-.history-brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 650; line-height: 1.5; letter-spacing: -.25px; color: var(--ink); }
-.panel-toggle, .panel-handle, .card-action { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 0; border-radius: var(--radius-control); color: var(--muted); background: transparent; font-size: 16px; cursor: pointer; }
-.panel-handle { width: 36px; height: 40px; margin: 16px 0 0 8px; }
-.panel-handle .el-icon { transform: rotate(180deg); }
-.panel-toggle:hover, .panel-handle:hover, .card-action:hover { color: var(--ink); background: var(--hover); }
-.history-new { margin: 0 16px 16px; min-height: 40px; border-radius: var(--radius-control); border-color: #dae2ed; background: var(--surface); color: var(--running); font-weight: 550; }
-.history-new:hover { border-color: #aac9f2; background: var(--blue-soft); }
-.history-search { margin: 0 16px 8px; }.history-search :deep(.el-input__wrapper) { min-height: 32px; padding: 2px 10px; border-radius: var(--radius-control); background: #fff; box-shadow: 0 0 0 1px var(--line) inset; }.history-search :deep(.el-input__inner) { font-size: 12px; }.history-search :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #8bb3e9 inset; }
-.history-scroll { flex: 1; min-height: 0; }
-.history-scroll :deep(.el-scrollbar__view) { padding-bottom: 8px; }
-.history-heading { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px 7px; font-size: 12px; font-weight: 550; color: var(--muted); }
-.history-heading > span:first-child { display: flex; align-items: center; gap: 6px; }
-.history-heading .el-icon { color: var(--stopped); font-size: 14px; }
-.count { display: inline-flex; justify-content: center; align-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px; color: var(--muted); background: #eceff3; font-size: 11px; font-variant-numeric: tabular-nums; }
-.history-item { --history-item-bg: var(--surface-soft); position: relative; margin: 2px 8px; border: 1px solid transparent; border-radius: var(--radius-card); }
-.history-item:hover, .history-item:focus-within { --history-item-bg: var(--hover); background: var(--history-item-bg); }
-.history-item.selected { --history-item-bg: var(--surface); background: var(--history-item-bg); border-color: #dce3ed; }
-.history-select { width: 100%; display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px; border: 0; border-radius: var(--radius-control); background: transparent; text-align: left; color: var(--ink); font: inherit; cursor: pointer; }
-.history-select > span { flex: 1; min-width: 0; }
-.history-select strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 550; line-height: 1.6; }
-.history-match { display: block; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 17px; color: var(--muted); }
-.history-meta { display: flex; align-items: center; gap: 7px; margin-top: 3px; line-height: 16px; white-space: nowrap; }
-.history-meta time { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted); }
-.history-state { flex-shrink: 0; font-size: 11px; font-style: normal; white-space: nowrap; }
-.history-state.running { color: var(--running); }.history-state.completed { color: var(--completed); }
-.history-state.failed { color: var(--failed); }.history-state.stopped { color: var(--stopped); }
-/* 状态以图形 + 文案区分。完成为细勾、失败为叉、停止为双线；运行圆环保持静态。 */
-.state-dot { position: relative; display: inline-block; flex: 0 0 12px; width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; color: var(--completed); }
-.state-dot.empty::before { content: ''; position: absolute; inset: 3px; border: 1px solid #acb3bd; border-radius: 50%; }
-.state-dot.running { color: var(--running); }
-.state-dot.running::before { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: currentColor; }
-.state-dot.running::after { content: ''; position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; opacity: .3; }
-.history-select .state-dot.running::after { opacity: .3; }
-.state-dot.completed::before { content: ''; position: absolute; width: 7px; height: 4px; top: 3px; left: 2px; border: solid currentColor; border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg); }
-.state-dot.failed { color: var(--failed); }
-.state-dot.failed::before, .state-dot.failed::after { content: ''; position: absolute; width: 10px; height: 1.5px; left: 1px; top: 5px; background: currentColor; transform: rotate(45deg); }
-.state-dot.failed::after { transform: rotate(-45deg); }
-.state-dot.stopped { color: var(--stopped); }
-.state-dot.stopped::before, .state-dot.stopped::after { content: ''; position: absolute; width: 2px; height: 8px; top: 2px; left: 3px; border-radius: 1px; background: currentColor; }
-.state-dot.stopped::after { left: 7px; }
-/* 展示调整：操作浮在标题行末尾，保留原按钮/事件与 Tab 顺序；触屏始终可见。 */
-.history-actions { position: absolute; right: 6px; top: 6px; display: flex; gap: 1px; padding-left: 10px; background: linear-gradient(to right,transparent,var(--history-item-bg) 10px); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
-.history-item:hover .history-actions, .history-item:focus-within .history-actions { opacity: 1; pointer-events: auto; }
-.history-actions :deep(.el-button) { margin: 0; width: 25px; height: 26px; padding: 4px; border-radius: 6px; color: var(--muted); }
-@media (hover: none), (pointer: coarse) {
-  .history-actions { opacity: 1; pointer-events: auto; padding-left: 0; top: 5px; }
-  .history-actions :deep(.el-button) { width: 28px; height: 28px; }
-  .history-select strong { padding-right: 82px; }
-}
-.history-actions :deep(.el-button.starred) { color: var(--stopped); }
-.history-actions :deep(.el-button .el-icon), .message-actions :deep(.el-icon) { font-size: 15px; }
-.history-actions :deep(.el-button:hover), .message-actions :deep(.el-button:not(:disabled):hover) { background: var(--hover); color: var(--ink); }
-.history-note { margin: 0; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
-.history-note.warning { color: var(--failed); }
-.history-scroll :deep(.el-empty__description p) { font-size: 13px; color: var(--muted); }
-.agent-page :deep(.agent-history-body) { padding: 0; min-height: 0; }
-.agent-page :deep(.agent-history-header) { margin: 0; padding: 16px 18px 8px; color: var(--muted); font-size: 12px; }
-.chat-pane { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
-.chat-scroll-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
-.message-scroll { height: 100%; flex: 1; min-height: 0; min-width: 0; }
-.message-scroll :deep(.el-scrollbar__wrap) { overscroll-behavior: contain; }
-.message-scroll :deep(.el-scrollbar__view) { min-height: 100%; }
-.message-scroll--welcome :deep(.el-scrollbar__view) { height: 100%; min-height: 0; container: agent-welcome / size; }
-.welcome { display: flex; align-items: flex-end; width: 100%; min-height: 100%; max-width: var(--content-width); margin: 0 auto; padding: 24px 40px 16px; }
-.suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }
-.suggestion { padding: 11px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: #fff; color: #586374; font: inherit; font-size: 13px; line-height: 1.5; cursor: pointer; text-align: left; }
-.suggestion:hover { background: #f7f9fc; border-color: #cdd5e1; color: var(--ink); }
-.chat-pane--welcome .composer-region { padding-top: 0; padding-bottom: clamp(40px, 30vh, 300px); }
-@container agent-welcome (max-width: 600px) { .welcome { padding: 16px 20px; }.suggestions { gap: 8px; }.suggestion { padding: 9px 12px; font-size: 12px; } }
-@container agent-welcome (max-height: 180px) { .welcome { padding-top: 12px; }.suggestion { padding: 7px 10px; } }
-.message-list { width: 100%; max-width: var(--content-width); margin: auto; padding: 36px 40px 28px; }
-.message-row { display: flex; align-items: flex-start; margin-bottom: 32px; }
-.message-row:last-child { margin-bottom: 0; }
-.message-row.user { justify-content: flex-end; }
-.message-column { min-width: 0; max-width: 100%; }
-.assistant .message-column { width: 100%; }
-.user .message-column { max-width: 82%; }
-.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 8px; font-size: 12px; }
-.user .message-meta { justify-content: flex-end; min-height: 18px; margin-bottom: 6px; }
-.status-elapsed { flex-shrink: 0; color: #9298a1; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.message-time { color: var(--muted); font-size: 12px; line-height: 20px; font-variant-numeric: tabular-nums; }
-.bubble { line-height: 1.85; font-size: 14px; overflow-wrap: anywhere; }
-/* 助手正文不套卡片；用户提问用轻量填色，与图表/工具详情的边框层次分开。 */
-.assistant .bubble { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.user .bubble { padding: 12px 18px; background: #eef3fa; border: 1px solid transparent; border-radius: var(--radius-container); color: #303b4c; }
-.user-content, .reasoning-text { margin: 0; white-space: pre-wrap; }
-.message-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 14px; padding-top: 2px; }
-.message-actions :deep(.el-button) { margin: 0; padding: 6px 9px; height: 30px; border-radius: var(--radius-control); color: var(--muted); font-size: 12px; }
-.message-actions :deep(.el-button:disabled) { color: #aeb5bf; }
-.process-trace { margin-bottom: 18px; }
-.process-trace:last-child { margin-bottom: 0; }
-/* 状态入口由内容决定宽度，不再有横跨回答区的背景条；实时文字只出现在展开后的过程。 */
-.trace-toggle { display: inline-flex; align-items: center; gap: 9px; width: auto; max-width: 100%; min-height: 36px; padding: 4px 6px 4px 0; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted); font: inherit; font-size: 12px; line-height: 24px; text-align: left; cursor: pointer; }
-.trace-toggle:hover { color: var(--ink); background: #f7f8fa; }
-.process-trace.live .trace-toggle, .waiting { min-height: 36px; gap: 8px; }
-.live-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #43536b; font-size: 13px; font-weight: 500; }
-/* 缩放层统一收至 24px，保留内部形变轨迹，使标识与状态文字同一行协调。 */
-:deep(.activity-mark) { position: relative; display: block; width: 24px; height: 24px; flex: 0 0 24px; }
-:deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.6666667); transform-origin: top left; }
-:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite; }
-:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: #2864e8; animation-duration: 5.6s; animation-timing-function: cubic-bezier(.5,0,.25,1); animation-iteration-count: infinite; }
-:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-5px,-5px); }
-:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(5px,-5px); }
-:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(5px,5px); }
-:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-5px,5px); }
-:deep(.activity-core) { position: absolute; inset: 9px; border-radius: 5px; background: #2864e8; }
-.trace-toggle .count { min-width: 0; height: auto; padding: 0; color: #9298a1; background: none; }
-.trace-toggle .chevron { margin-left: 1px; font-size: 11px; }
-.trace-result { font-size: 14px; color: var(--completed); flex-shrink: 0; }
-.trace-outcome { font-size: 12px; }
-.process-trace.error .trace-result, .process-trace.error .trace-outcome { color: var(--failed); }
-.process-trace.stopped .trace-result, .process-trace.stopped .trace-outcome { color: var(--stopped); }
-/* 文字光标只标记当前插入点；主要生成动效始终由状态图标承担。 */
-.timeline { padding: 0 0 0 18px; margin: 16px 0 2px 8px; list-style: none; border-left: 1px solid var(--line); }
-.process-item { position: relative; padding-bottom: 12px; }.process-item:last-child { padding-bottom: 0; }
-.timeline-dot { position: absolute; width: 7px; height: 7px; left: -22px; top: 16px; border-radius: 50%; background: #a9b0bb; box-shadow: 0 0 0 3px var(--surface); }
-.running .timeline-dot { background: var(--running); }.error .timeline-dot { background: var(--failed); }.stopped .timeline-dot { background: var(--stopped); }
-/* 保留既有时间线；只有当前请求中仍在执行的步骤显示柔和外环，不改变点位或布局。 */
-.timeline-dot.is-live::after { content: ''; position: absolute; inset: -2px; border: 1px solid var(--running); border-radius: 50%; pointer-events: none; animation: timeline-ring 1.8s ease-out infinite; }
-@keyframes timeline-ring { 0% { transform: scale(.7); opacity: .55; } 85%,100% { transform: scale(1.75); opacity: 0; } }
-@keyframes timeline-ring-soft { 0%,100% { opacity: .12; } 50% { opacity: .45; } }
+button { font: inherit; }
 
-.reasoning-line { padding: 4px 0 8px; color: #626e7f; font-size: 13px; line-height: 1.85; }
-.skill-load-line { display: flex; align-items: center; gap: 6px; padding: 4px 0 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-.skill-load-line .el-icon { font-size: 14px; flex-shrink: 0; }
-.process-card { border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--surface-soft); }
-.running .process-card { border-color: #d9e7fa; background: #f8fbff; }
-.error .process-card { border-color: #edd9dc; background: #fffafa; }.stopped .process-card { border-color: #e9e1d3; background: #fdfbf7; }
-.process-summary { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; background: transparent; color: #5d6878; font: inherit; text-align: left; cursor: pointer; }
-.process-summary:hover { background: rgba(27,40,59,.025); }
-.kind-icon { color: #7b8797; font-size: 16px; flex-shrink: 0; }
-.process-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.duration { flex-shrink: 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.process-state { color: var(--completed); font-size: 16px; flex-shrink: 0; }
-.running .process-state { color: var(--running); }.error .process-state { color: var(--failed); }.stopped .process-state { color: var(--stopped); }
-.chevron { flex-shrink: 0; color: #8b95a3; font-size: 12px; transition: transform .18s ease; }.chevron.expanded { transform: rotate(90deg); }
-.process-details { padding: 0 14px 14px 37px; font-size: 13px; color: #626e7f; }
-.process-details h4 { margin: 12px 0 7px; font-size: 12px; font-weight: 550; color: var(--muted); }
-.process-details pre, .json-text { margin: 8px 0 0; padding: 12px; max-height: 320px; overflow: auto; border-radius: var(--radius-control); background: #edf0f4; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 ui-monospace, Consolas, monospace; }
-.tool-facts { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 6px 16px; margin: 0; }
-.tool-facts dt { color: var(--muted); font-size: 12px; }.tool-facts dd { margin: 0; color: #4a5565; font-size: 12px; overflow-wrap: anywhere; }
-.raw-details { margin-top: 12px; }.raw-details summary { font-size: 12px; color: var(--muted); cursor: pointer; }.raw-details summary:hover { color: var(--running); }
-.technical-name { margin: 0; color: var(--muted); font-size: 12px; }
-.quiet { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 12px 0 0; }
-.waiting { display: flex; align-items: center; line-height: 24px; font-size: 12px; color: var(--muted); }.waiting { width: fit-content; max-width: 100%; }
-.error-card { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 14px 16px; border: 1px solid #ecd8dc; border-radius: var(--radius-card); background: #fff8f9; color: var(--failed); font-size: 13px; }
-.error-card > .el-icon { margin-top: 4px; flex-shrink: 0; font-size: 17px; }.error-card strong { font-weight: 550; }.error-card p { margin: 5px 0 0; color: #85676c; white-space: pre-wrap; }
-.answer-part + .answer-part { margin-top: 22px; }
-.chart-card { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
-.chart-card .card-head { display: flex; align-items: center; gap: 9px; padding: 14px 16px; border-bottom: 1px solid #eff1f4; }
-.chart-card .card-head .kind-icon { display: inline-flex; color: var(--running); }
-.chart-card .card-head .process-title { color: var(--ink); font-size: 14px; font-weight: 550; white-space: normal; overflow-wrap: anywhere; }
-.chart-card .chart-block-body { padding: 16px; }
-.chart-summary { margin: 0 0 16px; font-size: 14px; line-height: 1.8; color: var(--ink); }
-.chart-table-scroll { overflow: auto; max-width: 100%; max-height: 420px; border: 1px solid var(--line); border-radius: var(--radius-control); }
-.chart-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); }
-.chart-table th, .chart-table td { padding: 11px 14px; text-align: left; border: 0; border-bottom: 1px solid #edf0f3; white-space: nowrap; }
-.chart-table thead th { background: #f5f7f9; color: #566171; font-weight: 600; position: sticky; top: 0; z-index: 1; }
-.chart-table tbody tr:hover { background: #fafbfd; }.chart-table tbody tr:last-child td { border-bottom: 0; }
-:deep(.chart-container) { width: 100%; height: 320px; margin-top: 8px; }
-:deep(.chart-container.is-empty) { display: flex; align-items: center; justify-content: center; height: 160px; border: 1px dashed #dce1e8; border-radius: var(--radius-control); background: var(--surface-soft); }
-:deep(.chart-empty) { margin: 0; font-size: 13px; color: var(--muted); }
-.chart-meta { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
-.back-bottom { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); height: 36px; border-color: var(--line); box-shadow: var(--shadow-float); color: #586a83; font-size: 12px; background: var(--surface); z-index: 2; }
-.composer-region { width: min(var(--content-width),100%); flex-shrink: 0; margin: 0 auto; padding: 12px 40px 20px; }
-.composer { padding: 14px 16px 12px; border: 1px solid #dce1e8; border-radius: var(--radius-container); background: var(--surface); box-shadow: 0 3px 14px rgba(27,40,59,.04); }
-.composer:focus-within { border-color: #7fafea; box-shadow: 0 0 0 3px rgba(22,119,255,.07); }
-.composer :deep(.el-textarea__inner) { padding: 0 2px; box-shadow: none; background: transparent; line-height: 1.8; font-family: inherit; font-size: 14px; color: var(--ink); }
-.composer :deep(.el-textarea__inner:focus-visible) { outline: 0; }
-.composer :deep(.el-textarea__inner::placeholder) { color: #8c95a2; }
-.composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; margin-top: 12px; }
-.composer-toolbar > span { flex: 1; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.composer-toolbar :deep(.el-button) { flex-shrink: 0; height: 34px; min-width: 84px; margin: 0; border-radius: var(--radius-control); font-weight: 550; }
-.composer-toolbar :deep(.send-button) { width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: 50%; }
-.composer-toolbar :deep(.send-button .el-icon) { font-size: 18px; }
-@media (pointer: coarse) { .composer-toolbar :deep(.send-button) { width: 44px; min-width: 44px; height: 44px; } }
-.composer-toolbar :deep(.el-button.is-disabled) { color: #929ca9; background: #eff2f6; border-color: #e9edf2; }
-.composer-toolbar :deep(.stop-button) { background: #f2f5f9; border-color: #d8e0e9; color: #45566e; }
-.composer-toolbar :deep(.stop-button:hover) { color: var(--running); border-color: #adc9ed; background: var(--blue-soft); }
+/* 通用图标按钮 */
+.icon-button { display: inline-grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; transition: background .15s, color .15s; }
+.icon-button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.icon-button:disabled { opacity: .4; cursor: not-allowed; }
+.icon-button.small { width: 28px; height: 28px; font-size: 15px; }
+.icon-button.selected { color: var(--blue); background: var(--blue-soft); }
+
+/* ---------- 侧栏 ---------- */
+.sidebar { width: 260px; flex: 0 0 260px; display: flex; flex-direction: column; min-height: 0; padding: 14px 12px 8px; background: var(--fill-soft); border-right: 1px solid var(--line-soft); }
+.brand { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 2px 0 6px; }
+.brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:deep(.brand-mark) { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; flex-shrink: 0; width: 24px; height: 24px; padding: 5px; border-radius: 6px; background: var(--blue); }
+:deep(.brand-mark i) { border-radius: 1.5px; background: #fff; }
+:deep(.brand-mark i:nth-child(2)) { opacity: .62; }
+:deep(.brand-mark i:nth-child(3)) { opacity: .8; }
+.new-chat { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); font-size: 13.5px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.new-chat .el-icon { font-size: 15px; }
+.new-chat:hover { border-color: #a9c3ff; color: var(--blue); }
+.history-search { margin-top: 8px; }
+.history-search :deep(.el-input__wrapper) { height: 34px; padding: 0 10px; border-radius: 8px; background: transparent; box-shadow: none; transition: background .15s, box-shadow .15s; }
+.history-search :deep(.el-input__wrapper:hover) { background: var(--hover); }
+.history-search :deep(.el-input__wrapper.is-focus) { background: #fff; box-shadow: 0 0 0 1px var(--blue) inset; }
+.history-search :deep(.el-input__inner) { font-size: 13px; }
+.history-search kbd { font: 11px/1 var(--el-font-family); color: var(--disabled); }
+.history-scroll { flex: 1; min-height: 0; margin-top: 6px; }
+.history-empty { margin: 32px 0; text-align: center; font-size: 12.5px; color: var(--faint); }
+.history-group h2 { margin: 0; padding: 14px 8px 6px; font-size: 12px; font-weight: 400; color: var(--faint); }
+.history-item { position: relative; display: flex; align-items: center; border-radius: 8px; transition: background .12s; }
+.history-item:hover, .history-item:focus-within { background: var(--hover); }
+.history-item.selected { background: #e6e8eb; }
+.history-select { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 8px 4px 8px 10px; border: 0; background: transparent; text-align: left; color: var(--ink-2); cursor: pointer; }
+.history-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; line-height: 20px; }
+.history-item.selected .history-title { color: var(--ink); font-weight: 500; }
+.history-match { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--faint); }
+.history-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.history-dot.running { background: var(--blue); animation: soft-pulse 1.6s ease-in-out infinite; }
+.history-dot.failed { background: var(--danger); }
+.history-dot.stopped { background: var(--warning); }
+.history-more { display: grid; place-items: center; width: 28px; height: 28px; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; opacity: 0; transition: opacity .12s, background .12s; }
+.history-item:hover .history-more, .history-item:focus-within .history-more, .history-more[aria-expanded="true"] { opacity: 1; }
+.history-more:hover { background: #dcdfe3; color: var(--ink); }
+.history-note { margin: 6px 0 0; padding: 8px; font-size: 11.5px; line-height: 1.6; color: var(--danger); }
+
+/* ---------- 主区域 ---------- */
+.chat-pane { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.sidebar-open { position: absolute; z-index: 6; top: 12px; left: 12px; }
+.chat-header { flex-shrink: 0; display: flex; align-items: center; height: 56px; padding: 0 20px; }
+.sidebar-hidden .chat-header { padding-left: 56px; }
+.chat-title { display: inline-flex; align-items: center; gap: 6px; max-width: min(640px, 60vw); height: 34px; padding: 0 8px; margin-left: -8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; transition: background .15s; }
+.chat-title:hover { background: var(--fill); }
+.chat-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; }
+.title-star { flex-shrink: 0; color: #f7ba1e; font-size: 14px; }
+.title-chevron { flex-shrink: 0; color: var(--faint); font-size: 14px; }
+
+.chat-scroll-area { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.message-scroll { flex: 1; min-height: 0; }
+.message-scroll :deep(.el-scrollbar__wrap) { overscroll-behavior: contain; }
+.message-list { width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 12px 40px 32px; }
+
+/* 消息 */
+.message { position: relative; margin-top: 28px; scroll-margin-top: 16px; border-radius: 8px; animation: rise .3s ease-out both; }
+.message:first-child { margin-top: 8px; }
+.message.located { outline: 2px solid #b6ccff; outline-offset: 6px; }
+.message:focus { outline-offset: 6px; }
+.message.user { display: flex; flex-direction: column; align-items: flex-end; }
+.question { max-width: 78%; padding: 10px 16px; border-radius: 14px; background: var(--fill); color: var(--ink); }
+.question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.75; }
+.sent-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.question-actions { display: flex; justify-content: flex-end; margin-top: 4px; opacity: 0; transition: opacity .15s; }
+.message.user:hover .question-actions, .question-actions:focus-within { opacity: 1; }
+.message.assistant { color: var(--ink-2); }
+
+/* 执行过程 */
+.process { margin-bottom: 14px; }
+.trace-toggle { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 32px; padding: 0 10px 0 8px; margin-left: -8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: background .15s; }
+.trace-toggle:hover { background: var(--fill-soft); }
+.trace-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.process.live .trace-label { color: var(--ink); }
+.trace-elapsed { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--faint); }
+.trace-result { flex-shrink: 0; font-size: 15px; color: var(--success); }
+.process.error .trace-result { color: var(--danger); }
+.process.stopped .trace-result { color: var(--warning); }
+.trace-counts { display: inline-flex; gap: 4px; margin-left: 2px; }
+.trace-counts > span { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 6px; border-radius: 4px; background: var(--fill); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.trace-counts .el-icon { font-size: 12px; }
+.trace-chevron { flex-shrink: 0; font-size: 14px; color: var(--faint); transform: rotate(-90deg); transition: transform .2s; }
+.process.open .trace-chevron { transform: none; }
+.steps { margin-top: 6px; padding: 4px; border-radius: 10px; background: var(--fill-soft); animation: rise .2s ease-out both; }
+.step-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); font-size: 13.5px; text-align: left; }
+button.step-row { cursor: pointer; transition: background .12s; }
+button.step-row:hover, .step-row.open { background: #eef0f2; }
+.step-icon { flex-shrink: 0; font-size: 16px; color: var(--muted); }
+.step-row.skill { color: var(--faint); font-size: 13px; }
+.step-row.skill .step-icon { color: var(--faint); }
+.step-row.running .step-icon { color: var(--blue); animation: soft-pulse 1.6s ease-in-out infinite; }
+.step-row.running .step-name { color: var(--ink); font-weight: 500; }
+.step-row.error .step-icon, .step-row.error .step-name { color: var(--danger); }
+.step-name { flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--faint); }
+.step-time { flex-shrink: 0; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.step-chevron { flex-shrink: 0; font-size: 13px; color: var(--disabled); transform: rotate(-90deg); transition: transform .2s; }
+.step-row.open .step-chevron { transform: none; }
+.step-detail { margin: 2px 10px 8px 36px; padding: 2px 0 4px 14px; border-left: 2px solid #e4e6e9; font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+.step-detail h4 { margin: 8px 0 2px; font-size: 12px; font-weight: 500; color: var(--faint); }
+.step-detail h4:first-child { margin-top: 2px; }
+.step-detail .plain { margin: 0; white-space: pre-wrap; }
+.step-detail :deep(.markdown-body) { color: var(--muted); font-size: 13.5px; }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; margin: 4px 0; font-size: 12.5px; }
+.facts dt { color: var(--faint); }
+.facts dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.raw-details { margin-top: 6px; }
+.raw-details summary { font-size: 12px; color: var(--faint); cursor: pointer; }
+.raw-details summary:hover { color: var(--blue); }
+.raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border-radius: 8px; background: var(--fill); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
+:deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
+:deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.5555556); transform-origin: top left; }
+:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite; }
+:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: var(--blue); animation-duration: 5.6s; animation-timing-function: cubic-bezier(.5,0,.25,1); animation-iteration-count: infinite; }
+:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-5px,-5px); }
+:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(5px,-5px); opacity: .62; }
+:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(5px,5px); opacity: .8; }
+:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-5px,5px); }
+:deep(.activity-core) { position: absolute; inset: 9px; border-radius: 5px; background: var(--blue); }
+
+/* 正文 */
+.answer-part + .answer-part { margin-top: 16px; }
+.answer-part :deep(.markdown-body) { font-size: 15px; line-height: 1.85; color: var(--ink-2); }
+.note { margin: 10px 0 0; font-size: 13px; line-height: 1.7; color: var(--faint); }
+.error-card { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 12px 14px; border: 1px solid #fbd4d2; border-radius: 10px; background: #fff7f6; color: #d83931; font-size: 13.5px; }
+.error-card > .el-icon { margin-top: 3px; flex-shrink: 0; font-size: 16px; }
+.error-card strong { font-weight: 500; }
+.error-card p { margin: 4px 0 0; color: #8f5f5c; white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer-actions { display: flex; gap: 2px; margin-top: 10px; margin-left: -6px; }
+.answer-actions .icon-button { color: var(--faint); }
+.answer-actions .icon-button:hover:not(:disabled) { color: var(--ink); }
+.answer-actions .icon-button.selected { color: var(--blue); background: var(--blue-soft); }
+:deep(.feedback-down) { transform: rotate(180deg); }
+
+/* 结果卡片 */
+.result-card { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+.result-head { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 10px 8px 18px; border-bottom: 1px solid var(--line-soft); }
+.result-head strong { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.segmented { display: inline-flex; flex-shrink: 0; padding: 2px; border-radius: 7px; background: var(--fill); }
+.segmented button { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; transition: background .15s, color .15s; }
+.segmented button .el-icon { font-size: 13px; }
+.segmented button:hover { color: var(--ink); }
+.segmented button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(31,35,41,.1); }
+.result-body { padding: 14px 18px 12px; }
+.result-summary { margin: 0 0 6px; font-size: 13px; line-height: 1.7; color: var(--faint); }
+.result-empty { margin: 24px 0; text-align: center; font-size: 13px; color: var(--faint); }
+:deep(.chart-container) { width: 100%; height: 320px; }
+:deep(.chart-container.is-empty) { display: flex; align-items: center; justify-content: center; height: 140px; }
+:deep(.chart-empty) { margin: 0; font-size: 13px; color: var(--faint); }
+.data-table-scroll { max-height: 420px; overflow: auto; margin: 0 -18px -12px; border-top: 0; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.data-table th, .data-table td { padding: 10px 18px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.data-table thead th { position: sticky; top: 0; z-index: 1; background: var(--fill-soft); color: var(--muted); font-weight: 500; font-size: 13px; }
+.data-table td { color: var(--ink-2); }
+.data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table tbody tr:hover { background: #fafbfc; }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.result-foot { padding: 9px 18px; border-top: 1px solid var(--line-soft); background: #fafafa; font-size: 12px; color: var(--faint); }
+
+/* 右侧提问导航 */
+.question-nav { position: absolute; z-index: 5; top: 16px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; }
+.nav-rail { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; padding: 8px 6px; }
+.nav-rail i { display: block; width: 12px; height: 2px; border-radius: 1px; background: var(--disabled); transition: width .2s, background .2s; }
+.nav-rail i.active { width: 18px; background: var(--blue); }
+.nav-panel { position: absolute; top: 0; right: 0; width: 300px; max-height: min(420px, 70vh); overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgba(31,35,41,.12); opacity: 0; visibility: hidden; transform: translateX(6px); transition: opacity .15s, transform .15s, visibility .15s; }
+.question-nav:hover .nav-panel, .question-nav:focus-within .nav-panel { opacity: 1; visibility: visible; transform: none; }
+.nav-panel p { margin: 0; padding: 6px 10px 8px; font-size: 12px; color: var(--faint); }
+.nav-panel button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font-size: 13px; text-align: left; cursor: pointer; }
+.nav-panel button:hover { background: var(--fill); }
+.nav-panel button.active { background: var(--blue-soft); color: var(--blue); }
+.nav-panel button i { flex-shrink: 0; width: 10px; height: 2px; border-radius: 1px; background: var(--disabled); }
+.nav-panel button.active i { width: 14px; background: var(--blue); }
+.nav-panel button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-panel button time { flex-shrink: 0; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.to-bottom { position: absolute; z-index: 4; bottom: 12px; left: 50%; display: grid; place-items: center; width: 34px; height: 34px; margin-left: -17px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #fff; color: var(--muted); font-size: 16px; box-shadow: 0 4px 12px rgba(31,35,41,.1); cursor: pointer; transition: color .15s, border-color .15s; animation: fade-in .2s ease-out both; }
+.to-bottom:hover { color: var(--blue); border-color: #a9c3ff; }
+
+/* ---------- 输入区 ---------- */
+.composer-region { flex-shrink: 0; width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 4px 40px 0; }
+.composer { padding: 12px 12px 10px 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 2px 10px rgba(31,35,41,.05); transition: border-color .15s, box-shadow .15s; }
+.composer:focus-within { border-color: #a9c3ff; box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 2px 10px rgba(31,35,41,.05); }
+.composer :deep(.el-textarea__inner) { padding: 2px 0; border: 0; box-shadow: none; background: transparent; color: var(--ink); font-family: inherit; font-size: 14.5px; line-height: 1.7; }
+.composer :deep(.el-textarea__inner::placeholder) { color: var(--faint); }
+.composer-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.composer-toolbar .spacer { flex: 1; }
+.attach-button { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px 0 9px; border: 1px solid var(--line); border-radius: 15px; background: #fff; color: var(--muted); font-size: 13px; cursor: pointer; transition: color .15s, border-color .15s; }
+.attach-button .el-icon { font-size: 14px; }
+.attach-button em { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--blue); color: #fff; font-size: 11px; font-style: normal; line-height: 16px; text-align: center; }
+.attach-button:hover:not(:disabled) { color: var(--blue); border-color: #a9c3ff; }
+.attach-button:disabled { opacity: .5; cursor: not-allowed; }
+.composer-hint { font-size: 12px; color: var(--faint); }
+.send-button { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: var(--blue); color: #fff; font-size: 17px; cursor: pointer; transition: background .15s, transform .1s; }
+.send-button:hover:not(:disabled) { background: var(--blue-hover); }
+.send-button:active:not(:disabled) { transform: scale(.94); }
+.send-button:disabled { background: var(--disabled); cursor: not-allowed; }
+.send-button.stop { background: var(--ink); font-size: 18px; }
+.send-button.stop:hover { background: #000; }
+.composer-editing { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -2px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); color: var(--blue); font-size: 12.5px; }
+.composer-editing > span { display: inline-flex; align-items: center; gap: 6px; }
+.attachment-list { display: flex; flex-wrap: wrap; gap: 8px; max-height: 112px; overflow: auto; padding-bottom: 10px; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); font-size: 12.5px; cursor: pointer; }
+.file-chip > span, .file-open > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip .el-icon { flex-shrink: 0; color: var(--blue); font-size: 15px; }
+.file-chip.removable { padding: 0 2px 0 0; background: var(--fill-soft); cursor: default; }
+.file-open { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0 4px 0 10px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.file-open:hover { color: var(--blue); }
+.file-remove { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer; }
+.file-remove .el-icon { color: inherit; font-size: 13px; }
+.file-remove:hover { background: var(--hover); color: var(--ink); }
+.attachment-error { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; color: var(--danger); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.attachment-error span { flex: 1; padding-top: 4px; }
+.tooltip-text { max-width: 300px; font-size: 12px; line-height: 1.7; }
+.disclaimer { flex-shrink: 0; margin: 0; padding: 8px 0 10px; text-align: center; font-size: 11.5px; color: var(--disabled); }
+.attachment-drop { position: absolute; z-index: 20; inset: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 2px dashed #a9c3ff; border-radius: 16px; background: rgba(243,246,255,.94); color: var(--blue); pointer-events: none; }
+.attachment-drop .el-icon { font-size: 30px; }
+.attachment-drop span { font-size: 12.5px; color: var(--muted); }
+.attachment-content { max-height: 58vh; margin: 0; padding: 16px; overflow: auto; border-radius: 8px; background: var(--fill-soft); color: var(--ink); font: 12px/1.75 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-page :deep(.el-dialog) { border-radius: 12px; }
+
+/* ---------- 起始页 ---------- */
+.chat-pane.is-welcome { justify-content: center; padding-bottom: 6vh; }
+.welcome { display: flex; flex-direction: column; align-items: center; padding: 0 40px 28px; text-align: center; animation: rise .45s ease-out both; }
+.welcome :deep(.welcome-mark) { width: 48px; height: 48px; gap: 4px; padding: 11px; border-radius: 13px; box-shadow: 0 8px 20px -8px rgba(22,100,255,.55); }
+.welcome :deep(.welcome-mark i) { border-radius: 3px; }
+.welcome-title { margin: 22px 0 0; font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .5px; color: var(--ink); }
+.welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
+.is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
+.is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: 0 4px 20px rgba(31,35,41,.07); }
+.is-welcome .composer:focus-within { box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 4px 20px rgba(31,35,41,.07); }
+.is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
+.examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; animation: rise .45s ease-out .12s both; }
+.example { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--fill-soft); text-align: left; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
+.example:hover { background: #fff; border-color: #c4d6ff; box-shadow: 0 4px 14px rgba(22,100,255,.08); }
+.example-icon { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 9px; background: #fff; color: var(--blue); font-size: 18px; box-shadow: 0 0 0 1px var(--line-soft) inset; }
+.example:hover .example-icon { background: var(--blue-soft); box-shadow: none; }
+.example-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.example-text strong { font-size: 14px; font-weight: 500; color: var(--ink); }
+.example-text span { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+.example-arrow { flex-shrink: 0; font-size: 13px; color: var(--disabled); transition: color .15s, transform .15s; }
+.example:hover .example-arrow { color: var(--blue); transform: translateX(2px); }
+
+/* ---------- Markdown ---------- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :deep(.typewriter) { overflow-wrap: anywhere; }
-:deep(.stream-cursor) { display: inline-block; width: 2px; height: .95em; margin-left: 3px; border-radius: 2px; vertical-align: -.12em; background: #9298a1; pointer-events: none; opacity: .5; }
-:deep(.markdown-body p) { margin: 0 0 12px; }:deep(.markdown-body p:last-child) { margin-bottom: 0; }
-:deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3), :deep(.markdown-body h4), :deep(.markdown-body h5), :deep(.markdown-body h6) { margin: 24px 0 10px; line-height: 1.5; font-size: 1.12em; font-weight: 600; color: var(--ink); }
+:deep(.stream-cursor) { display: inline-block; width: 2px; height: .95em; margin-left: 2px; border-radius: 1px; vertical-align: -.12em; background: var(--blue); opacity: .7; pointer-events: none; }
+:deep(.markdown-body p) { margin: 0 0 12px; }
+:deep(.markdown-body p:last-child) { margin-bottom: 0; }
 :deep(.markdown-body > :first-child) { margin-top: 0; }
-:deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 24px; margin: 12px 0; }
+:deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3), :deep(.markdown-body h4), :deep(.markdown-body h5), :deep(.markdown-body h6) { margin: 22px 0 10px; line-height: 1.5; font-size: 1.08em; font-weight: 600; color: var(--ink); }
+:deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.18em; }
+:deep(.markdown-body strong) { font-weight: 600; color: var(--ink); }
+:deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
-:deep(.markdown-body a) { color: var(--running); text-decoration: underline; text-underline-offset: 3px; }
-:deep(.markdown-body blockquote) { margin: 14px 0; padding: 8px 14px; border-left: 3px solid #c5d3e5; color: #69768a; background: #f7f9fc; border-radius: 0 6px 6px 0; }
-:deep(.markdown-body code) { padding: 2px 5px; border-radius: 4px; font-size: .9em; font-family: ui-monospace, Consolas, monospace; background: #f0f2f5; color: #465269; }
-:deep(.code-block) { margin: 16px 0; border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: #f7f8fa; }
-:deep(.code-toolbar) { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; gap: 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-:deep(.code-toolbar button) { flex-shrink: 0; padding: 4px 7px; border: 0; border-radius: 6px; color: #5d6b80; background: transparent; font: inherit; cursor: pointer; }
+:deep(.markdown-body li::marker) { color: var(--faint); }
+:deep(.markdown-body a) { color: var(--blue); text-decoration: none; }
+:deep(.markdown-body a:hover) { text-decoration: underline; }
+:deep(.markdown-body blockquote) { margin: 12px 0; padding: 4px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+:deep(.markdown-body hr) { height: 1px; margin: 18px 0; border: 0; background: var(--line-soft); }
+:deep(.markdown-body code) { padding: 2px 5px; border-radius: 4px; font-size: .9em; font-family: ui-monospace, Consolas, 'SF Mono', monospace; background: var(--fill); color: #c03b51; }
+:deep(.code-block) { margin: 14px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--fill-soft); }
+:deep(.code-toolbar) { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--line-soft); color: var(--faint); font-size: 12px; }
+:deep(.code-toolbar button) { flex-shrink: 0; padding: 4px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 :deep(.code-toolbar button:hover) { background: var(--hover); color: var(--ink); }
-:deep(.code-block pre) { margin: 0; padding: 16px; overflow-x: auto; line-height: 1.75; tab-size: 4; }
-:deep(.code-block pre code) { padding: 0; white-space: pre; background: transparent; color: #354255; }
-:deep(.code-fold summary), :deep(.md-details > summary) { padding: 10px 12px; font-size: 12px; color: #66748a; cursor: pointer; }
+:deep(.code-block pre) { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.7; tab-size: 4; }
+:deep(.code-block pre code) { padding: 0; white-space: pre; background: transparent; color: var(--ink-2); }
+:deep(.code-fold summary), :deep(.md-details > summary) { padding: 8px 12px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
 :deep(.md-details) { margin: 12px 0; padding-left: 12px; border-left: 2px solid var(--line); }
-:deep(.table-scroll) { overflow: auto; max-width: 100%; max-height: 420px; margin: 16px 0; border: 1px solid var(--line); border-radius: var(--radius-control); }
-:deep(.markdown-body table) { width: 100%; border-collapse: collapse; font-size: 13px; }
-:deep(.markdown-body th), :deep(.markdown-body td) { min-width: 90px; padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
-:deep(.markdown-body th) { position: sticky; top: 0; background: #f5f7f9; color: #586374; font-weight: 600; }
+:deep(.table-scroll) { overflow: auto; max-width: 100%; max-height: 420px; margin: 14px 0; border: 1px solid var(--line); border-radius: 10px; }
+:deep(.markdown-body table) { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+:deep(.markdown-body th), :deep(.markdown-body td) { min-width: 90px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; }
+:deep(.markdown-body th) { position: sticky; top: 0; background: var(--fill-soft); color: var(--muted); font-weight: 500; }
 :deep(.markdown-body tr:last-child td) { border-bottom: 0; }
+
+/* 焦点、滚动条 */
 :deep(button:focus-visible), :deep(summary:focus-visible), :deep(a:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
-:deep(.el-scrollbar__thumb) { background: #a4adba; }
-:deep(.code-block pre), :deep(.table-scroll), .chart-table-scroll, .process-details pre { scrollbar-width: thin; scrollbar-color: #bfc6d0 transparent; }
+:deep(.el-scrollbar__thumb) { background: #c4c8ce; }
+.raw, .data-table-scroll, :deep(.code-block pre), :deep(.table-scroll) { scrollbar-width: thin; scrollbar-color: #c9cdd4 transparent; }
+
+/* 动画 */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes vds-whole-turn{0%,8%{transform:rotate(-8deg) scale(.88)}25%,34%{transform:rotate(34deg) scale(.92)}51%,58%{transform:rotate(82deg) scale(.78)}76%,84%{transform:rotate(120deg) scale(.91)}100%{transform:rotate(172deg) scale(.88)}}
 @keyframes vds-fold-a{0%,8%,100%{transform:translate(-5px,-5px) rotate(0deg)}25%,34%{transform:translate(0,-7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-6px,-3px) rotate(25deg) scaleX(.82)}}
 @keyframes vds-fold-b{0%,8%,100%{transform:translate(5px,-5px) rotate(0deg)}25%,34%{transform:translate(7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(3px,-6px) rotate(25deg) scaleY(.82)}}
 @keyframes vds-fold-c{0%,8%,100%{transform:translate(5px,5px) rotate(0deg)}25%,34%{transform:translate(0,7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(6px,3px) rotate(25deg) scaleX(.82)}}
 @keyframes vds-fold-d{0%,8%,100%{transform:translate(-5px,5px) rotate(0deg)}25%,34%{transform:translate(-7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-3px,6px) rotate(25deg) scaleY(.82)}}
-@media (max-width: 767px) {
-  .agent-page { border-radius: 0; border: 0; }
-  .history-brand { padding: 8px 18px 16px; }.panel-toggle { display: none; }
-  .panel-handle { width: 28px; height: 36px; margin: 10px 0 0 2px; }
-  .message-list { padding: 24px 14px 20px; }.message-row { margin-bottom: 26px; }
-  .message-column, .assistant .message-column { max-width: 100%; width: 100%; }.user .message-column { width: auto; max-width: 94%; }
-  .user .bubble { padding: 10px 14px; }.message-meta { gap: 6px; }
-  .process-summary { gap: 6px; padding: 9px; }.process-title { font-size: 12px; }.process-details { padding: 0 12px 12px; }.duration { font-size: 11px; }
-  .trace-toggle { gap: 7px; }.process-trace.live .trace-toggle, .waiting { gap: 8px; }
-  .timeline { margin-left: 4px; padding-left: 14px; }.timeline-dot { left: -18px; }
-  .chart-card .card-head { padding: 10px 12px; }.chart-card .chart-block-body { padding: 12px; }
-  .composer-region { padding: 8px 12px max(12px,env(safe-area-inset-bottom)); }.composer { padding: 12px; }
-  .composer-toolbar { gap: 8px; }.composer-toolbar > span { font-size: 11px; }
-  .message-actions { gap: 2px; }.message-actions :deep(.el-button) { padding: 6px; }
-}
-@media (max-height: 520px), (max-width: 767px) { .chat-pane--welcome .composer-region { padding-bottom: max(20px,env(safe-area-inset-bottom)); } }
 
-/* 附件与正文分开呈现：发送前可预览/移除，发送后保留文件卡；所有内容以纯文本插值输出。 */
-.attachment-list { display: flex; flex-wrap: wrap; gap: 8px; max-height: 112px; overflow: auto; padding: 0 0 10px; }
-.attachment-chip { display: flex; align-items: center; min-width: 0; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-control); background: #f7f9fc; }
-.attachment-preview { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 0; background: transparent; color: #4e6080; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border-radius: var(--radius-control); }
-.attachment-preview > span { min-width: 0; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attachment-preview .el-icon { flex-shrink: 0; font-size: 16px; }
-.attachment-preview:hover { color: var(--blue); background: var(--blue-soft); }
-.attachment-remove, .attachment-error button { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; margin-right: 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
-.attachment-remove:hover { background: #e8edf5; color: var(--ink); }
-.sent-attachments { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }.sent-attachments .attachment-preview { border: 1px solid #dce5f1; background: #ffffffa8; }
-.attachment-error { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; color: var(--failed); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }.attachment-error button { margin-left: auto; }
-.composer-tools { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: 4px 10px; }.composer-tools > span { color: var(--muted); font-size: 11px; line-height: 1.5; }
-.attachment-info { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; flex-shrink: 0; border: 0; border-radius: var(--radius-control); color: #8b95a3; background: transparent; cursor: pointer; }
-.attachment-info .el-icon { font-size: 15px; }
-.attachment-info:hover, .attachment-info:focus-visible { color: var(--blue); background: var(--blue-soft); }
-.attachment-format-hint { max-width: 280px; font-size: 12px; line-height: 1.6; }
-@media (pointer: coarse) { .attachment-info { width: 44px; height: 44px; } }
-.attachment-limits { max-width: 280px; padding: 3px 1px; font-size: 12px; line-height: 1.6; }
-.composer-tools :deep(.el-button) { min-width: 0; padding: 7px 9px; color: #63758e; }.attachment-count { margin-left: 6px; font-size: 11px; color: var(--muted); }
-.attachment-content { max-height: 58vh; overflow: auto; margin: 0; padding: 16px; background: var(--surface-soft); border-radius: var(--radius-control); color: var(--ink); font: 12px/1.75 ui-monospace,Consolas,monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.attachment-drop { position: absolute; z-index: 20; inset: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; border: 2px dashed #93b5e8; border-radius: var(--radius-container); background: #f3f7fff5; color: #4779bd; text-align: center; pointer-events: none; }.attachment-drop .el-icon { font-size: 32px; }.attachment-drop span { font-size: 12px; }
-@media (max-width: 767px) { .composer-tools { gap: 4px; }.composer-tools .next-draft { display: none; }.attachment-preview > span { max-width: 150px; } }
-
-
-/* 会话级导航与正文操作保持轻量。 */
-.chat-pane { position: relative; }
-.conversation-bar { flex-shrink: 0; min-height: 56px; display: flex; align-items: center; gap: 16px; padding: 10px 24px; border-bottom: 0; background: #fff; }
-.conversation-title { display: flex; align-items: center; gap: 8px; min-width: 0; border: 0; padding: 4px 0; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
-.conversation-title > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }.conversation-title .el-icon { flex-shrink: 0; color: #a2aab6; font-size: 13px; }
-.conversation-controls { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.utility-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 30px; height: 30px; padding: 5px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-.utility-button .el-icon { font-size: 16px; }.utility-button:hover { color: var(--running); background: var(--hover); }.utility-button.starred { color: #af8535; }
-.conversation-outline { position: absolute; z-index: 8; top: 56px; right: 20px; width: min(360px, calc(100% - 32px)); max-height: min(420px, 60%); overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-container); background: #fff; box-shadow: 0 12px 40px #2636521a; }
-.outline-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 8px 8px; color: var(--muted); font-size: 12px; }
-.outline-entry { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 8px; border: 0; border-radius: var(--radius-control); background: transparent; font: inherit; text-align: left; cursor: pointer; }.outline-entry:hover { background: var(--hover); }.outline-entry > span { color: #9aa5b5; font-size: 11px; font-variant-numeric: tabular-nums; }.outline-entry strong { flex: 1; min-width: 0; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }.outline-entry .el-icon { font-size: 12px; color: #a0aabb; }
-.message-row { scroll-margin-top: 18px; border-radius: var(--radius-control); }.message-row.located { outline: 2px solid #b9d1f2; outline-offset: 8px; }.message-row:focus { outline-offset: 8px; }
-.bottom-generating { color: var(--running); }
-@media (max-width: 767px) { .conversation-bar { gap: 8px; padding: 8px 12px; min-height: 52px; }.conversation-title > span { font-size: 13px; }.conversation-controls { gap: 2px; }.conversation-outline { top: 52px; right: 12px; }.composer-tools { gap: 2px; }.composer-tools .next-draft { display: none; } }
-
-.question-actions { display: flex; justify-content: flex-end; margin-top: 3px; }
-.question-actions .utility-button { color: #8c95a2; }
-.utility-button:disabled { opacity: .4; cursor: not-allowed; }
-.feedback-button.selected { color: var(--running); background: var(--blue-soft); }
-:deep(.feedback-down) { transform: rotate(180deg); }
-.composer-editing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-.composer-editing > span { display: inline-flex; align-items: center; gap: 7px; }
-@media (pointer: coarse) { .question-actions .utility-button, .message-actions .utility-button { min-width: 44px; height: 44px; }.panel-handle { width: 44px; height: 44px; } }
-
-/* ===================== 视觉升级层（2026-11-06） =====================
-   只叠加展示样式：统一色彩与层次、柔和阴影、起始页欢迎区、微交互。
-   不改变结构语义、事件与数据流；减少动态偏好下所有新增动效自动关闭。 */
-.agent-page, .history-panel {
-  --blue: #3b6cff; --blue-strong: #2f5bf0; --blue-soft: #eef3ff; --violet: #7c5cff;
-  --ink: #1f2633; --ink-2: #3c4657; --muted: #7a8495; --line: #e7ebf2; --line-strong: #dbe2ee;
-  --surface-soft: #f6f8fc; --hover: #eef2f8; --running: #3b6cff;
-  --radius-container: 18px; --radius-card: 14px; --radius-control: 10px;
-  --shadow-sm: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.04);
-  --shadow-md: 0 1px 2px rgba(16,24,40,.04), 0 10px 28px -8px rgba(31,45,80,.12);
-  --shadow-lg: 0 2px 6px rgba(16,24,40,.04), 0 24px 48px -16px rgba(31,45,80,.18);
-  --ease-out: cubic-bezier(.22,1,.36,1);
-  --content-width: 920px;
-  --el-color-primary: #3b6cff;
-  --el-font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Huawei Sans', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-}
-.agent-page ::selection { background: rgba(59,108,255,.18); }
-
-/* 侧栏：浅色渐变底 + 品牌标识 + 主按钮 */
-.history-panel { width: 272px; flex-basis: 272px; background: linear-gradient(180deg, #f7f9fd 0%, #f3f6fb 100%); border-right-color: var(--line); }
-.history-brand { gap: 10px; padding: 22px 16px 18px 18px; }
-.history-brand h1 { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
-.brand-mark, .hero-mark { position: relative; display: grid; grid-template-columns: 1fr 1fr; flex-shrink: 0; background: linear-gradient(135deg, #3b6cff 0%, #6a5cff 100%); box-shadow: 0 6px 14px -6px rgba(59,108,255,.7), inset 0 1px 0 rgba(255,255,255,.25); }
-.brand-mark { width: 30px; height: 30px; gap: 3px; padding: 7px; border-radius: 9px; }
-.brand-mark i, .hero-mark i { border-radius: 2.5px; background: rgba(255,255,255,.95); }
-.brand-mark i:nth-child(2), .hero-mark i:nth-child(2) { background: rgba(255,255,255,.62); }
-.brand-mark i:nth-child(3), .hero-mark i:nth-child(3) { background: rgba(255,255,255,.78); }
-.panel-toggle, .panel-handle, .card-action { border-radius: var(--radius-control); transition: background .15s, color .15s; }
-.history-new { min-height: 42px; margin: 0 16px 14px; border: 0; border-radius: 12px; color: #fff; font-weight: 600; letter-spacing: .3px;
-  background: linear-gradient(135deg, #3b6cff 0%, #5b6dff 55%, #6a5cff 100%); box-shadow: 0 8px 18px -10px rgba(59,108,255,.9), inset 0 1px 0 rgba(255,255,255,.2);
-  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s; }
-.history-new:hover, .history-new:focus-visible { color: #fff; background: linear-gradient(135deg, #3b6cff 0%, #5b6dff 55%, #6a5cff 100%); filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 22px -10px rgba(59,108,255,.95), inset 0 1px 0 rgba(255,255,255,.2); }
-.history-new:active { transform: translateY(0); filter: brightness(.98); }
-.history-search :deep(.el-input__wrapper) { min-height: 36px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .15s; }
-.history-search :deep(.el-input__wrapper:hover) { box-shadow: 0 0 0 1px var(--line-strong) inset; }
-.history-search :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #9db4ff inset, 0 0 0 3px rgba(59,108,255,.1); }
-.history-heading { padding: 14px 20px 6px; font-size: 11.5px; letter-spacing: .4px; color: #8a93a3; }
-.count { border-radius: 999px; background: #e9edf5; color: #6b7587; }
-.history-item { margin: 2px 10px; border-radius: 12px; transition: background .15s, border-color .15s, box-shadow .15s; }
-.history-item:hover, .history-item:focus-within { --history-item-bg: #ebeff7; }
-.history-item.selected { --history-item-bg: #fff; border-color: #e3e9f4; box-shadow: var(--shadow-sm); }
-.history-item.selected::before { content: ''; position: absolute; left: -1px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: linear-gradient(180deg, #3b6cff, #6a5cff); }
-.history-select { padding: 10px 12px; border-radius: 12px; }
-.history-select strong { font-weight: 500; color: var(--ink-2); }
-.history-item.selected .history-select strong { font-weight: 600; color: var(--ink); }
-.history-actions :deep(.el-button) { border-radius: 7px; }
-.history-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 20px 24px; text-align: center; }
-.history-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: #fff; color: #9aa8c4; font-size: 20px; box-shadow: var(--shadow-sm); border: 1px solid var(--line); }
-.history-empty p { margin: 0; font-size: 12.5px; color: var(--muted); }
-
-/* 主区域：起始页的柔和光晕背景 */
-.chat-pane { background: #fff; }
-.chat-pane--welcome::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(720px 360px at 50% 8%, rgba(59,108,255,.10), transparent 70%), radial-gradient(520px 300px at 78% 28%, rgba(124,92,255,.07), transparent 70%), radial-gradient(520px 300px at 20% 34%, rgba(20,184,166,.05), transparent 70%); }
-.chat-scroll-area, .composer-region { position: relative; z-index: 1; }
-
-/* 起始页：欢迎语 + 示例卡片 */
-.welcome { flex-direction: column; justify-content: flex-end; align-items: center; gap: 28px; padding: 24px 40px 20px; }
-.welcome-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; animation: agent-rise .6s var(--ease-out) both; }
-.hero-mark { width: 52px; height: 52px; gap: 5px; padding: 12px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 14px 30px -12px rgba(59,108,255,.75), inset 0 1px 0 rgba(255,255,255,.28); }
-.hero-mark i { border-radius: 4px; }
-.welcome-title { margin: 0; font-size: 30px; line-height: 1.3; font-weight: 700; letter-spacing: .5px;
-  background: linear-gradient(100deg, #1f2633 0%, #2c3a63 40%, #3b6cff 75%, #6a5cff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.welcome-tip { max-width: 560px; margin: 12px 0 0; font-size: 14.5px; line-height: 1.75; color: var(--muted); }
-.suggestions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; }
-.suggestion { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px 14px 14px 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.82); backdrop-filter: blur(6px); box-shadow: var(--shadow-sm); color: var(--ink-2);
-  transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out), border-color .2s; animation: agent-rise .6s var(--ease-out) both; animation-delay: calc(120ms + var(--i, 0) * 70ms); }
-.suggestion:hover, .suggestion:focus-visible { background: #fff; border-color: #cfdaf5; color: var(--ink); transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.suggestion:active { transform: translateY(0); }
-.suggestion-icon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px; font-size: 18px; }
-.suggestion-icon.tone-0 { color: #3b6cff; background: #ecf1ff; }
-.suggestion-icon.tone-1 { color: #0f9f8f; background: #e7f7f4; }
-.suggestion-icon.tone-2 { color: #7c5cff; background: #f1edff; }
-.suggestion-text { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
-.suggestion-text strong { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.5; }
-.suggestion-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-.suggestion-arrow { flex-shrink: 0; color: #b4bdcc; font-size: 14px; opacity: 0; transform: translateX(-4px); transition: opacity .2s, transform .2s var(--ease-out), color .2s; }
-.suggestion:hover .suggestion-arrow, .suggestion:focus-visible .suggestion-arrow { opacity: 1; transform: none; color: var(--blue); }
-.chat-pane--welcome .composer-region { padding-bottom: clamp(32px, 24vh, 260px); animation: agent-rise .6s var(--ease-out) .08s both; }
-@container agent-welcome (max-width: 640px) {
-  .welcome { gap: 20px; padding: 16px 16px 12px; }
-  .welcome-title { font-size: 22px; }.welcome-tip { font-size: 13px; }.hero-mark { width: 42px; height: 42px; padding: 10px; gap: 4px; margin-bottom: 14px; border-radius: 13px; }
-  .suggestions { grid-template-columns: 1fr; gap: 8px; }
-  .suggestion { padding: 10px 12px; border-radius: 14px; }.suggestion-icon { width: 32px; height: 32px; font-size: 16px; border-radius: 9px; }
-  .suggestion-text { flex-direction: row; align-items: baseline; gap: 8px; }.suggestion-text strong { flex-shrink: 0; font-size: 13px; }
-  .suggestion-arrow { opacity: 1; transform: none; }
-}
-@container agent-welcome (max-height: 420px) { .welcome-tip, .hero-mark { display: none; } .welcome { gap: 16px; } }
-@container agent-welcome (max-height: 280px) { .welcome-hero { display: none; } }
-
-/* 顶部会话栏：半透明毛玻璃 + 细分隔 */
-.conversation-bar { position: relative; z-index: 3; min-height: 58px; padding: 10px 24px; background: rgba(255,255,255,.86); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid #eef1f6; }
-.conversation-title { padding: 6px 10px; margin-left: -10px; border-radius: var(--radius-control); transition: background .15s; }
-.conversation-title:hover { background: var(--hover); }
-.conversation-title > span { font-size: 15px; font-weight: 600; }
-.conversation-title .el-icon { opacity: 0; transition: opacity .15s; }
-.conversation-title:hover .el-icon, .conversation-title:focus-visible .el-icon { opacity: 1; }
-.utility-button { border-radius: 9px; transition: background .15s, color .15s; }
-.utility-button:hover { color: var(--blue); background: var(--blue-soft); }
-.utility-button.starred { color: #e0a100; }
-.conversation-outline { top: 62px; border-color: var(--line); border-radius: 16px; box-shadow: var(--shadow-lg); animation: agent-pop .18s var(--ease-out) both; transform-origin: top right; }
-.outline-entry { border-radius: 10px; }
-.outline-entry:hover > span { color: var(--blue); }
-
-/* 消息 */
-.message-list { padding: 32px 40px 32px; }
-.message-row { margin-bottom: 30px; animation: agent-rise .42s var(--ease-out) both; }
-.user .bubble { padding: 12px 18px; border: 0; border-radius: 20px 20px 6px 20px; color: #fff; line-height: 1.75;
-  background: linear-gradient(135deg, #3b6cff 0%, #5a67ff 60%, #6a5cff 100%); box-shadow: 0 10px 24px -14px rgba(59,108,255,.85); }
-.user .bubble ::selection { background: rgba(255,255,255,.35); }
-.sent-attachments .attachment-preview { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.16); color: #fff; }
-.sent-attachments .attachment-preview:hover { background: rgba(255,255,255,.26); color: #fff; }
-.message-meta { min-height: 22px; margin-bottom: 6px; }
-.message-time { color: #9aa3b2; font-size: 11.5px; }
-.bubble { font-size: 14.5px; line-height: 1.85; color: var(--ink); }
-.question-actions { opacity: .0; transition: opacity .15s; }
-.message-row:hover .question-actions, .question-actions:focus-within { opacity: 1; }
-@media (hover: none), (pointer: coarse) { .question-actions { opacity: 1; } }
-.message-actions { gap: 2px; margin-top: 12px; }
-.message-actions :deep(.el-button) { border-radius: 9px; color: #7f8899; }
-.message-actions :deep(.el-button:not(:disabled):hover), .message-actions .utility-button:hover { color: var(--blue); background: var(--blue-soft); }
-.feedback-button { transition: transform .15s var(--ease-out), background .15s, color .15s; }
-.feedback-button:active { transform: scale(.88); }
-.feedback-button.selected { color: var(--blue); background: var(--blue-soft); }
-
-/* 执行过程入口：胶囊样式 */
-.trace-toggle { gap: 8px; min-height: 34px; padding: 4px 12px 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: #f8fafd; color: #6b7587; transition: background .15s, border-color .15s, color .15s; }
-.trace-toggle:hover { color: var(--ink); background: #f1f5fd; border-color: #d6e0f5; }
-.process-trace.live .trace-toggle, .waiting { min-height: 38px; }
-.process-trace.live .trace-toggle { padding-left: 8px; background: linear-gradient(90deg, #f1f5ff, #f8f6ff); border-color: #dbe4fb; }
-.waiting { padding: 4px 14px 4px 8px; border: 1px solid #dbe4fb; border-radius: 999px; background: linear-gradient(90deg, #f1f5ff, #f8f6ff); }
-.live-step { color: #33415c; }
-.process-trace.completed .trace-result { color: #16a34a; }
-.timeline { margin: 14px 0 2px 16px; border-left-color: #e3e8f1; }
-.process-card { border-radius: 12px; background: #fafbfd; transition: border-color .15s, box-shadow .15s; }
-.process-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
-.process-details pre, .json-text { background: #f2f5fa; border-radius: 10px; }
-
-/* 图表卡片 */
-.answer-part + .answer-part { margin-top: 20px; }
-.chart-card { border-color: var(--line); border-radius: 18px; box-shadow: var(--shadow-md); transition: box-shadow .2s; }
-.chart-card .card-head { gap: 10px; padding: 14px 16px 12px 18px; border-bottom: 0; }
-.chart-card .card-head .kind-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--blue-soft); color: var(--blue); font-size: 16px; }
-.chart-card .card-head .process-title { font-size: 15px; font-weight: 600; }
-.card-action { width: 34px; height: 34px; color: #7f8899; }
-.card-action:hover { color: var(--blue); background: var(--blue-soft); }
-.chart-card .chart-block-body { padding: 0 18px 16px; }
-.chart-summary { margin: -2px 0 8px 40px; font-size: 13px; color: var(--muted); line-height: 1.7; }
-:deep(.chart-container) { height: 340px; margin-top: 4px; }
-.chart-meta { margin: 8px 0 0; padding-top: 10px; border-top: 1px dashed var(--line); color: #9aa3b2; }
-.chart-table-scroll, :deep(.table-scroll) { border-color: var(--line); border-radius: 12px; }
-.chart-table th, .chart-table td, :deep(.markdown-body th), :deep(.markdown-body td) { padding: 11px 16px; border-bottom-color: #eef1f6; }
-.chart-table thead th, :deep(.markdown-body th) { background: #f6f8fc; color: #5b6576; font-size: 12.5px; font-weight: 600; }
-.chart-table td.num, .chart-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-.chart-table tbody tr, :deep(.markdown-body tbody tr) { transition: background .12s; }
-.chart-table tbody tr:hover, :deep(.markdown-body tbody tr:hover) { background: #f7f9ff; }
-
-/* Markdown 排版 */
-:deep(.markdown-body strong) { font-weight: 600; color: #111827; }
-:deep(.markdown-body li::marker) { color: #8aa2ea; }
-:deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.22em; }
-:deep(.markdown-body h3) { font-size: 1.1em; }
-:deep(.markdown-body hr) { height: 1px; margin: 20px 0; border: 0; background: var(--line); }
-:deep(.markdown-body blockquote) { border-left-color: #a9bdf5; background: #f6f8ff; color: #5b6576; border-radius: 0 10px 10px 0; }
-:deep(.markdown-body code) { background: #f1f4fa; color: #3a4a74; border-radius: 6px; }
-:deep(.code-block) { border-color: var(--line); border-radius: 14px; background: #fbfcfe; box-shadow: var(--shadow-sm); }
-:deep(.code-toolbar) { background: #f4f6fb; border-bottom-color: var(--line); font-size: 11.5px; letter-spacing: .3px; }
-:deep(.code-toolbar button) { border-radius: 7px; }
-:deep(.code-toolbar button:hover) { color: var(--blue); background: var(--blue-soft); }
-:deep(.code-block pre) { font-size: 12.5px; }
-:deep(.stream-cursor) { width: 2px; background: var(--blue); opacity: .55; }
-
-/* 错误卡片 */
-.error-card { border-color: #f6d4d9; border-radius: 14px; background: linear-gradient(180deg, #fff7f8, #fff); box-shadow: var(--shadow-sm); color: #c2414f; }
-
-/* 回到底部 */
-.back-bottom { height: 38px; padding: 0 16px; border-color: var(--line); border-radius: 999px; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); box-shadow: var(--shadow-md); color: #4b5565; animation: agent-fade .2s ease both; }
-.back-bottom:hover { color: var(--blue); border-color: #cfdaf5; background: #fff; }
-@keyframes agent-fade { from { opacity: 0; } to { opacity: 1; } }
-
-/* 输入区：悬浮卡片 + 聚焦光晕 + 渐变发送键 */
-.composer-region { padding: 10px 40px 22px; }
-.composer { padding: 14px 14px 10px 18px; border: 1px solid var(--line-strong); border-radius: 22px; background: #fff; box-shadow: var(--shadow-md); transition: border-color .2s, box-shadow .2s; }
-.composer:hover { border-color: #cdd7e8; }
-.composer:focus-within { border-color: #a7bcff; box-shadow: 0 0 0 4px rgba(59,108,255,.10), var(--shadow-md); }
-.chat-pane--welcome .composer { box-shadow: var(--shadow-lg); }
-.chat-pane--welcome .composer:focus-within { box-shadow: 0 0 0 4px rgba(59,108,255,.10), var(--shadow-lg); }
-.composer :deep(.el-textarea__inner) { font-size: 14.5px; line-height: 1.75; }
-.composer :deep(.el-textarea__inner::placeholder) { color: #9aa3b2; }
-.composer-toolbar { margin-top: 8px; }
-.composer-tools :deep(.el-button) { border-radius: 999px; padding: 7px 12px 7px 10px; color: #5b6576; background: #f4f6fa; }
-.composer-tools :deep(.el-button:not(.is-disabled):hover) { color: var(--blue); background: var(--blue-soft); }
-.attachment-info { border-radius: 999px; }
-.composer-toolbar :deep(.send-button) { width: 38px; min-width: 38px; height: 38px; border: 0; color: #fff;
-  background: linear-gradient(135deg, #3b6cff 0%, #6a5cff 100%); box-shadow: 0 8px 18px -8px rgba(59,108,255,.9);
-  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s, background .2s; }
-.composer-toolbar :deep(.send-button:not(.is-disabled):hover) { transform: translateY(-1px) scale(1.04); filter: brightness(1.06); box-shadow: 0 12px 22px -8px rgba(59,108,255,.95); }
-.composer-toolbar :deep(.send-button:not(.is-disabled):active) { transform: scale(.94); }
-.composer-toolbar :deep(.send-button.is-disabled) { color: #fff; background: #d5dbe6; border: 0; box-shadow: none; }
-.composer-toolbar :deep(.stop-button) { height: 38px; padding: 0 16px; border-radius: 999px; border-color: #d9e2f4; background: #f4f7ff; color: #3b4f80; }
-.composer-toolbar :deep(.stop-button:hover) { color: var(--blue); border-color: #a7bcff; background: #eaf0ff; }
-@media (pointer: coarse) { .composer-toolbar :deep(.send-button) { width: 44px; min-width: 44px; height: 44px; } }
-.attachment-chip { border-color: var(--line); border-radius: 12px; background: #f6f8fc; }
-.attachment-drop { inset: 14px; border-color: #9db4ff; border-radius: 22px; background: rgba(243,246,255,.94); backdrop-filter: blur(4px); color: var(--blue); }
-.composer-editing { color: var(--blue); }
-
-/* 细滚动条 */
-:deep(.el-scrollbar__thumb) { background: #c4ccd8; }
-:deep(.el-scrollbar__thumb:hover) { background: #a9b3c2; }
-
-/* 抽屉与对话框圆角 */
-.agent-page :deep(.el-dialog) { border-radius: 18px; overflow: hidden; }
-.agent-page :deep(.el-drawer) { background: linear-gradient(180deg, #f7f9fd 0%, #f3f6fb 100%); }
-
-@keyframes agent-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@keyframes agent-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
-
-@media (max-width: 767px) {
-  .history-brand { padding: 6px 16px 14px; }
-  .message-list { padding: 22px 14px 20px; }
-  .composer-region { padding: 8px 12px max(12px, env(safe-area-inset-bottom)); }
-  .composer { padding: 12px 12px 8px 14px; border-radius: 20px; }
-  .conversation-bar { padding: 8px 12px; min-height: 52px; }
-  .conversation-outline { top: 56px; }
-  .chart-summary { margin-left: 0; }
-  .chart-card .card-head { padding: 12px 12px 10px; }.chart-card .chart-block-body { padding: 0 12px 12px; }
-  :deep(.chart-container) { height: 300px; }
-  .composer-tools :deep(.el-button) { padding: 7px 10px; }
-}
-
-/* 减少动态仍隐藏文字光标、禁用其他动画；按用户明确选择保留生成状态标识。 */
+/* 减少动态：关闭其余动效与文字光标；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   :deep(.stream-cursor) { display: none !important; }
-  /* 减少动态时仅保留低幅明暗，避免扩散缩放。 */
-  .timeline-dot.is-live::after { transform: none; animation: timeline-ring-soft 1.8s ease-in-out infinite !important; }
-  :deep(.activity-mark .activity-form) { display: block; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
+  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
   :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
   :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
   :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
   :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
 }
+</style>
+<!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
+<style lang="less">
+.agent-menu.el-dropdown__popper { --el-dropdown-menuItem-hover-fill: #f2f3f5; --el-dropdown-menuItem-hover-color: #1f2329; border-radius: 10px; }
+.agent-menu .el-dropdown-menu { padding: 4px; }
+.agent-menu .el-dropdown-menu__item { min-width: 148px; height: 34px; padding: 0 10px; border-radius: 6px; font-size: 13.5px; color: #373c43; }
+.agent-menu .el-dropdown-menu__item .el-icon { margin-right: 8px; font-size: 15px; }
+.agent-menu .el-dropdown-menu__item.danger { color: #f54a45; }
+.agent-menu .el-dropdown-menu__item.danger:not(.is-disabled):hover { background: #fff1f0; color: #f54a45; }
+.agent-menu .el-dropdown-menu__item--divided { margin-top: 4px; }
 </style>
