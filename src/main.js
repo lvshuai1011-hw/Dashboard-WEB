@@ -1,0 +1,12 @@
+import './demo-transport.js';
+import { createApp } from 'vue';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
+import { createPinia } from 'pinia';
+import i18n from '../stub/i18n';
+import Page from './views/ux/aiAgent.vue';
+const app = createApp(Page);
+app.use(ElementPlus);
+app.use(createPinia());
+app.use(i18n);
+app.mount('#app');
