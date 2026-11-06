@@ -94,13 +94,18 @@
                 <template v-else>
                   <div v-if="message.process.length || isActive(message)" class="process" :class="[message.status, { live: isActive(message), open: traceOpen(message) }]">
                     <button class="trace-toggle" type="button" :data-message-id="message.id" :aria-expanded="traceOpen(message)" :aria-controls="`trace-${message.id}`">
+                      <!-- 生成中的折叠方块与结果图标共用一个槽位：结束时方块收拢，再弹出结果图标。 -->
+                      <span class="trace-icon">
+                        <Transition name="mark" mode="out-in">
+                          <ActivityMark v-if="isActive(message)" key="live" />
+                          <el-icon v-else key="result" class="trace-result"><component :is="message.status === 'error' ? CircleClose : message.status === 'stopped' ? VideoPause : CircleCheck" /></el-icon>
+                        </Transition>
+                      </span>
                       <template v-if="isActive(message)">
-                        <ActivityMark />
                         <span class="trace-label">{{ liveLabel(message) }}<template v-if="liveStepName(message)"> · {{ liveStepName(message) }}</template></span>
                         <span class="trace-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
                       </template>
                       <template v-else>
-                        <el-icon class="trace-result"><component :is="message.status === 'error' ? CircleClose : message.status === 'stopped' ? VideoPause : CircleCheck" /></el-icon>
                         <span class="trace-label">{{ summaryLabel(message) }}</span>
                         <span v-if="stepCounts(message).length" class="trace-counts">
                           <span v-for="entry in stepCounts(message)" :key="entry.group" :title="entry.label"><el-icon><component :is="entry.icon" /></el-icon>{{ entry.count }}</span>
@@ -2381,7 +2386,12 @@ button { font: inherit; }
 .trace-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .process.live .trace-label { color: var(--ink); }
 .trace-elapsed { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--faint); }
+.trace-icon { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; }
 .trace-result { flex-shrink: 0; font-size: 15px; color: var(--success); }
+.mark-leave-active { transition: transform .26s cubic-bezier(.55,0,.75,.2), opacity .26s ease-in; }
+.mark-leave-to { opacity: 0; transform: scale(.2) rotate(90deg); }
+.mark-enter-active { transition: transform .34s cubic-bezier(.34,1.56,.64,1), opacity .2s ease-out; }
+.mark-enter-from { opacity: 0; transform: scale(.4); }
 .process.error .trace-result { color: var(--danger); }
 .process.stopped .trace-result { color: var(--warning); }
 .trace-counts { display: inline-flex; gap: 4px; margin-left: 2px; }
@@ -2421,15 +2431,15 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
-:deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
+:deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; animation: mark-in .42s cubic-bezier(.34,1.56,.64,1) backwards; }
 :deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.5555556); transform-origin: top left; }
-:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; will-change: transform; animation: vds-whole-turn 5.6s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: var(--blue); will-change: transform; animation-duration: 5.6s; animation-timing-function: cubic-bezier(.45,0,.55,1); animation-iteration-count: infinite; }
-:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-5px,-5px); }
-:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(5px,-5px); opacity: .62; }
-:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(5px,5px); opacity: .8; }
-:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-5px,5px); }
-:deep(.activity-core) { position: absolute; inset: 9px; border-radius: 5px; background: var(--blue); }
+:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; will-change: transform; animation: vds-whole-turn 4.2s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-fold) { position: absolute; left: 9.5px; top: 9.5px; width: 13px; height: 13px; border-radius: 4px; background: var(--blue); will-change: transform; animation-duration: 4.2s; animation-timing-function: cubic-bezier(.45,0,.55,1); animation-iteration-count: infinite; }
+:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-7.5px,-7.5px); }
+:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(7.5px,-7.5px); background: #6e9fff; }
+:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(7.5px,7.5px); background: #4583ff; }
+:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-7.5px,7.5px); }
+:deep(.activity-core) { position: absolute; inset: 10px; border-radius: 4px; background: var(--blue); transform: scale(0); animation: vds-core 4.2s cubic-bezier(.45,0,.55,1) infinite; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2620,20 +2630,23 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes vds-whole-turn{0%{transform:rotate(0deg) scale(.88)}25%{transform:rotate(90deg) scale(.92)}50%{transform:rotate(180deg) scale(.8)}75%{transform:rotate(270deg) scale(.91)}100%{transform:rotate(360deg) scale(.88)}}
-@keyframes vds-fold-a{0%,100%{transform:translate(-5px,-5px) rotate(0deg)}25%{transform:translate(0,-7px) rotate(45deg) scale(.94)}50%{transform:translate(-1px,-1px) rotate(0deg) scale(1.18)}75%{transform:translate(-6px,-3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-b{0%,100%{transform:translate(5px,-5px) rotate(0deg)}25%{transform:translate(7px,0) rotate(45deg) scale(.94)}50%{transform:translate(1px,-1px) rotate(0deg) scale(1.18)}75%{transform:translate(3px,-6px) rotate(25deg) scaleY(.82)}}
-@keyframes vds-fold-c{0%,100%{transform:translate(5px,5px) rotate(0deg)}25%{transform:translate(0,7px) rotate(45deg) scale(.94)}50%{transform:translate(1px,1px) rotate(0deg) scale(1.18)}75%{transform:translate(6px,3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-d{0%,100%{transform:translate(-5px,5px) rotate(0deg)}25%{transform:translate(-7px,0) rotate(45deg) scale(.94)}50%{transform:translate(-1px,1px) rotate(0deg) scale(1.18)}75%{transform:translate(-3px,6px) rotate(25deg) scaleY(.82)}}
+@keyframes vds-fold-a{0%,100%{transform:translate(-7.5px,-7.5px) rotate(0deg)}25%{transform:translate(0,-9px) rotate(45deg) scale(.94)}50%{transform:translate(-2px,-2px) rotate(0deg) scale(1.3)}75%{transform:translate(-8px,-4px) rotate(25deg) scaleX(.82)}}
+@keyframes vds-fold-b{0%,100%{transform:translate(7.5px,-7.5px) rotate(0deg)}25%{transform:translate(9px,0) rotate(45deg) scale(.94)}50%{transform:translate(2px,-2px) rotate(0deg) scale(1.3)}75%{transform:translate(4px,-8px) rotate(25deg) scaleY(.82)}}
+@keyframes vds-fold-c{0%,100%{transform:translate(7.5px,7.5px) rotate(0deg)}25%{transform:translate(0,9px) rotate(45deg) scale(.94)}50%{transform:translate(2px,2px) rotate(0deg) scale(1.3)}75%{transform:translate(8px,4px) rotate(25deg) scaleX(.82)}}
+@keyframes vds-fold-d{0%,100%{transform:translate(-7.5px,7.5px) rotate(0deg)}25%{transform:translate(-9px,0) rotate(45deg) scale(.94)}50%{transform:translate(-2px,2px) rotate(0deg) scale(1.3)}75%{transform:translate(-4px,8px) rotate(25deg) scaleY(.82)}}
+@keyframes vds-core{0%,100%{transform:scale(0)}25%{transform:scale(.8) rotate(45deg)}50%{transform:scale(1)}75%{transform:scale(.55) rotate(25deg)}}
+@keyframes mark-in{from{opacity:0;transform:scale(.4) rotate(-45deg)}to{opacity:1;transform:none}}
 
 /* 减少动态：关闭其余动效与文字光标；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   :deep(.stream-cursor) { display: none !important; }
-  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-core) { animation: vds-core 4.2s cubic-bezier(.45,0,.55,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
