@@ -176,10 +176,9 @@
                     <el-tooltip v-if="canRegenerate(message)" :content="t('AIAGENT.BUTTON.REGENERATE')"><button type="button" class="icon-button small" :disabled="streaming" :aria-label="t('AIAGENT.BUTTON.REGENERATE')" @click="regenerate(message)"><el-icon><RefreshRight /></el-icon></button></el-tooltip>
                   </div>
                   <!-- 追问建议：仅在最新一条已完成的答复下展示，点击直接提问。 -->
-                  <div v-if="showFollowUps(message)" class="follow-ups">
-                    <p class="follow-label">{{ uiCopy.related }}</p>
+                  <div v-if="showFollowUps(message)" class="follow-ups" role="group" :aria-label="uiCopy.related">
                     <button v-for="(question, index) in message.followUps" :key="question" type="button" class="follow-up" :style="{ '--i': index }" @click="askFollowUp(question)">
-                      <span>{{ question }}</span><el-icon class="follow-icon" aria-hidden="true"><Plus /></el-icon>
+                      <span>{{ question }}</span><ArrowRightIcon class="follow-icon" aria-hidden="true" />
                     </button>
                   </div>
                 </template>
@@ -256,7 +255,7 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, type InputInstance, type ScrollbarInstance } from 'element-plus';
-import { ArrowDown, Check, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, VideoPause, Warning } from '@element-plus/icons-vue';
+import { ArrowDown, Check, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Top, RefreshRight, Search, Star, StarFilled, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
 import { merge, cloneDeep } from 'lodash-es';
@@ -315,6 +314,7 @@ const ChartLineIcon = lineIcon(['M3 3v16a2 2 0 0 0 2 2h16', 'm19 9-5 5-4-4-3 3']
 const TableIcon = lineIcon(['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M3 9h18', 'M9 9v12']);
 const MoreIcon = lineIcon(['M12 12h.01', 'M19 12h.01', 'M5 12h.01'], 2.4);
 const ChevronIcon = lineIcon(['m6 9 6 6 6-6']);
+const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
@@ -2446,13 +2446,12 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.feedback-down) { transform: rotate(180deg); }
 
 /* 追问建议 */
-.follow-ups { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
-.follow-label { margin: 0 0 6px; font-size: 12.5px; color: var(--faint); }
-.follow-up { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; margin-left: -10px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 14px; line-height: 1.6; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 60ms); width: calc(100% + 20px); }
-.follow-up > span { flex: 1; min-width: 0; }
-.follow-up:hover, .follow-up:focus-visible { background: var(--fill); color: var(--ink); }
-.follow-icon { flex-shrink: 0; font-size: 14px; color: var(--disabled); transition: color .15s; }
-.follow-up:hover .follow-icon, .follow-up:focus-visible .follow-icon { color: var(--muted); }
+.follow-ups { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 16px; }
+.follow-up { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 36px; padding: 7px 14px; border: 0; border-radius: 10px; background: var(--fill-soft); color: var(--ink-2); font-size: 14px; line-height: 1.55; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 60ms); }
+.follow-up > span { min-width: 0; }
+.follow-up:hover, .follow-up:focus-visible { background: #eef3ff; color: var(--blue); outline: none; }
+.follow-icon { flex-shrink: 0; width: 14px; height: 14px; color: var(--faint); transition: color .15s, transform .15s; }
+.follow-up:hover .follow-icon, .follow-up:focus-visible .follow-icon { color: var(--blue); transform: translateX(2px); }
 
 /* 结果卡片 */
 .result-card { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
