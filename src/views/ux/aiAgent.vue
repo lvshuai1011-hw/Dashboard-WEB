@@ -175,6 +175,13 @@
                     <el-tooltip :content="t('CM.COMMON.NOT')"><button type="button" class="icon-button small" :class="{ selected: feedback.get(message.id) === 'down' }" :aria-label="t('CM.COMMON.NOT')" :aria-pressed="feedback.get(message.id) === 'down'" @click="setFeedback(message, 'down')"><FeedbackIcon down /></button></el-tooltip>
                     <el-tooltip v-if="canRegenerate(message)" :content="t('AIAGENT.BUTTON.REGENERATE')"><button type="button" class="icon-button small" :disabled="streaming" :aria-label="t('AIAGENT.BUTTON.REGENERATE')" @click="regenerate(message)"><el-icon><RefreshRight /></el-icon></button></el-tooltip>
                   </div>
+                  <!-- 追问建议：仅在最新一条已完成的答复下展示，点击直接提问。 -->
+                  <div v-if="showFollowUps(message)" class="follow-ups">
+                    <p class="follow-label">{{ uiCopy.related }}</p>
+                    <button v-for="(question, index) in message.followUps" :key="question" type="button" class="follow-up" :style="{ '--i': index }" @click="askFollowUp(question)">
+                      <span>{{ question }}</span><el-icon class="follow-icon" aria-hidden="true"><Plus /></el-icon>
+                    </button>
+                  </div>
                 </template>
               </article>
             </div>
@@ -367,6 +374,8 @@ interface ChatMessage {
   lastSignalAt?: number;
   // 本轮接收到的字节总数与事件数，用于状态栏显示「已收到 N 段内容」。
   streamBytes?: number;
+  // 模型在答复结束前通过 json 事件下发的追问建议（最多 3 条）。
+  followUps?: string[];
 }
 /** 气泡渲染布局：process 按时间顺序拆成「可折叠时间线」与「正文主体」两部分。 */
 interface MessageLayout { timeline: ProcessItem[]; body: ProcessItem[]; }
@@ -874,6 +883,12 @@ function makeConversation(): Conversation {
   return { id: uid(), title: '', conversationId: null, messages: [], createdAt: Date.now(), updatedAt: Date.now(), draft: '', attachments: [], favorite: false };
 }
 // localStorage 是不可信输入；仅恢复白名单字段，并把刷新前的运行态转成停止态。
+// 追问建议：仅接受非空字符串数组，去重后最多 3 条，单条不超过 200 字。
+function readFollowUps(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const list = [...new Set(value.filter((v): v is string => typeof v === 'string').map(v => v.trim()).filter(v => v && Array.from(v).length <= 200))].slice(0, 3);
+  return list.length ? list : undefined;
+}
 function readHistory(): Conversation[] {
   try {
     const data: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -911,6 +926,7 @@ function readHistory(): Conversation[] {
           finishedAt: typeof m.finishedAt === 'number' && Number.isFinite(m.finishedAt) ? m.finishedAt : undefined,
           errorKey: Object.values(errorKeys).concat('AIAGENT.ERROR.NETWORK', 'AIAGENT.ERROR.AUTH').includes(String(m.errorKey)) ? String(m.errorKey) : undefined,
           errorDetail: textValue(m.errorDetail), attachments: m.role === 'user' ? readAttachments(m.attachments) : [],
+          followUps: m.role === 'assistant' ? readFollowUps(m.followUps) : undefined,
           process,
         };
       }),
@@ -1070,13 +1086,13 @@ const welcomeExamples = ['ONE', 'TWO', 'THREE'];
 // ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
 // 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
 const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
-  tryAsking: '试试这样问', fill: '填入', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
+  tryAsking: '试试这样问', fill: '填入', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
   searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
   done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
   questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
   steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
 } : {
-  tryAsking: 'Try asking', fill: 'Use', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
+  tryAsking: 'Try asking', fill: 'Use', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
   searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
   done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
   questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
@@ -1093,6 +1109,16 @@ const historyGroups = computed(() => {
     { key: 'earlier', label: uiCopy.value.earlier, items: unpinned.value.filter(c => c.updatedAt < week) },
   ].filter(group => group.items.length);
 });
+// 点击追问直接发送；若输入框已有草稿、附件或正在编辑问题，则改为填入，避免覆盖用户内容。
+function askFollowUp(question: string) {
+  if (streaming.value || attachmentReading.value || editingMessageId.value || draft.value.trim() || draftAttachments.value.length) { setDraft(question); return; }
+  draft.value = question;
+  sendMessage();
+}
+function showFollowUps(message: ChatMessage) {
+  const list = messages.value;
+  return message.role === 'assistant' && message.status === 'completed' && !isActive(message) && !!message.followUps?.length && list[list.length - 1]?.id === message.id;
+}
 function onChatCommand(chat: Conversation, command: string, where: 'side' | 'header' = 'side') {
   if (command === 'favorite') toggleFavorite(chat);
   else if (command === 'rename') renameConversation(chat, where);
@@ -1913,6 +1939,12 @@ function handleJsonEvent(message: ChatMessage, event: StreamEvent) {
   try {
     const jsonStr = content.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
     const parsed: unknown = JSON.parse(jsonStr);
+    // 追问建议：{ "follow_up": ["...", "...", "..."] }，不进入执行过程，答复结束后展示在正文下方。
+    if (isRecord(parsed) && 'follow_up' in parsed) {
+      const list = readFollowUps((parsed as JsonRecord).follow_up);
+      if (list) message.followUps = list;
+      return;
+    }
     if (isRecord(parsed) && typeof (parsed as JsonRecord).chart_type === 'string') {
       const item = addProcess(message, 'chart');
       item.chart = parsed as ChartContent;
@@ -1930,7 +1962,25 @@ function handleJsonEvent(message: ChatMessage, event: StreamEvent) {
   } catch { /* 非 JSON 或解析失败,忽略 */ }
 }
 function isActive(message: ChatMessage) { return running.has(message.id); }
-function finishRequest(messageId: string, message: ChatMessage, status: 'completed' | 'stopped' | 'error') {
+// 追问在结束帧之后下发：答复先完成、过程先收起；连接再保留片刻，只接收追问 json。
+const FOLLOW_UP_WAIT = 20_000;
+const tails = new Map<string, { abort: () => void; timer: ReturnType<typeof setTimeout> }>();
+function endTail(messageId: string) {
+  const tail = tails.get(messageId);
+  if (!tail) return;
+  tails.delete(messageId); clearTimeout(tail.timer); tail.abort();
+}
+function acceptTailEvent(message: ChatMessage, event: StreamEvent) {
+  if (event.outerEvent !== 'ExecuteAgentNormal' || (event.innerEvent !== 'json' && event.innerEvent !== 'subagent_json')) return;
+  try {
+    const parsed: unknown = JSON.parse((event.content ?? '').replace(/^```json\s*/, '').replace(/\s*```$/, '').trim());
+    if (!isRecord(parsed) || !('follow_up' in parsed)) return;
+    const list = readFollowUps((parsed as JsonRecord).follow_up);
+    if (list) { message.followUps = list; persistHistory(); scheduleScroll(); }
+    endTail(message.id);
+  } catch { /* 非 JSON，忽略 */ }
+}
+function finishRequest(messageId: string, message: ChatMessage, status: 'completed' | 'stopped' | 'error', keepTail = false) {
   const handle = running.get(messageId);
   if (!handle) return;
   running.delete(messageId);
@@ -1939,7 +1989,9 @@ function finishRequest(messageId: string, message: ChatMessage, status: 'complet
   // 完成后收起过程卡，让答复正文成为视觉主体；图表属于正文，保持展开。
   if (status === 'completed') message.process.forEach(p => { if (p.kind !== 'chart') p.expanded = false; });
   if (!running.size) { clearInterval(elapsedTimer); elapsedTimer = undefined; }
-  handle.abort(); persistHistory(); scheduleScroll();
+  if (keepTail && !disposed) tails.set(messageId, { abort: handle.abort, timer: setTimeout(() => endTail(messageId), FOLLOW_UP_WAIT) });
+  else handle.abort();
+  persistHistory(); scheduleScroll();
 }
 function sendMessage() {
   const content = draft.value.trim();
@@ -1967,22 +2019,23 @@ function sendMessage() {
   following.value = true; now.value = Date.now();
   if (!elapsedTimer) elapsedTimer = setInterval(() => { now.value = Date.now(); }, 500);
   const abort = chatStream({ conversationId: chat.conversationId, agent: { agentCode: 'SDA' }, message: { content: attachmentRequestContent(content, files) }, stream: true }, event => {
-    if (disposed || !running.has(message.id)) return;
+    if (disposed) return;
+    if (!running.has(message.id)) { if (tails.has(message.id)) acceptTailEvent(message, event); return; }
     if (event.conversationId) chat.conversationId = event.conversationId;
     chat.updatedAt = Date.now();
     const result = applyAgentEvent(message, event);
     if (result) {
-      finishRequest(message.id, message, result === 'done' ? 'completed' : 'error');
+      finishRequest(message.id, message, result === 'done' ? 'completed' : 'error', result === 'done');
       if (result === 'error') ElMessage.error(t(message.errorKey!));
     } else { scheduleSave(); scheduleScroll(); }
   }, error => {
-    if (disposed || !running.has(message.id)) return;
+    if (disposed || !running.has(message.id)) { endTail(message.id); return; }
     // chatStream 用 Object.assign(new Error(...), { status }) 带上状态码，
     // 它是个 Error 实例，isRecord() 判不出来——必须直接读属性，否则 401/403 会被误报成网络错误。
     const status = (error as { status?: number } | null)?.status;
     message.errorKey = status === 401 || status === 403 ? 'AIAGENT.ERROR.AUTH' : 'AIAGENT.ERROR.NETWORK';
     finishRequest(message.id, message, 'error'); ElMessage.error(t(message.errorKey));
-  }, () => { if (!disposed) finishRequest(message.id, message, 'completed'); });
+  }, () => { endTail(message.id); if (!disposed) finishRequest(message.id, message, 'completed'); });
   // 注册必须在 chatStream 可能同步回调之前完成，因此先占位再覆盖 abort。
   running.set(message.id, { abort: () => undefined, message });
   running.get(message.id)!.abort = abort;
@@ -2225,7 +2278,7 @@ onUnmounted(() => { clearTimeout(locatedTimer); clearTimeout(copiedTimer); });
 onUnmounted(() => {
   processEventRoot?.removeEventListener('click', onProcessClick, true);
   processEventRoot = undefined;
-  stopAll(); persistHistory(); disposed = true; clearTimeout(saveTimer); clearInterval(elapsedTimer);
+  stopAll(); [...tails.keys()].forEach(endTail); persistHistory(); disposed = true; clearTimeout(saveTimer); clearInterval(elapsedTimer);
   motionQuery?.removeEventListener('change', syncMedia);
   window.removeEventListener('pagehide', onPageHide);
 });
@@ -2391,6 +2444,15 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .answer-actions .icon-button:hover:not(:disabled) { color: var(--ink); }
 .answer-actions .icon-button.selected { color: var(--blue); background: var(--blue-soft); }
 :deep(.feedback-down) { transform: rotate(180deg); }
+
+/* 追问建议 */
+.follow-ups { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.follow-label { margin: 0 0 6px; font-size: 12.5px; color: var(--faint); }
+.follow-up { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; margin-left: -10px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 14px; line-height: 1.6; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 60ms); width: calc(100% + 20px); }
+.follow-up > span { flex: 1; min-width: 0; }
+.follow-up:hover, .follow-up:focus-visible { background: var(--fill); color: var(--ink); }
+.follow-icon { flex-shrink: 0; font-size: 14px; color: var(--disabled); transition: color .15s; }
+.follow-up:hover .follow-icon, .follow-up:focus-visible .follow-icon { color: var(--muted); }
 
 /* 结果卡片 */
 .result-card { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }

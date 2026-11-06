@@ -25,6 +25,19 @@ npm run dev -- --host localhost --port 5180
 
 预览默认使用 `src/demo-transport.js` 在浏览器内模拟 SSE，不连接真实 AI 服务。输入“趋势”“表格”“代码”“长文”“报错”“断流”可测试不同场景；英文也支持 trend、table、code、error、premature eof。
 
+## 追问建议（后端约定）
+
+答复结束后，后端可在同一 SSE 流里下发一个 `json` 事件作为追问建议，推荐顺序：
+
+```
+答复正文 … → finish_stop → json: {"follow_up": ["问题一", "问题二", "问题三"]} → 关闭连接
+```
+
+- 收到 `finish_stop` 即判定答复完成：执行过程收起、动画停止；前端继续保留连接最多 20 秒，只接收 `follow_up`，其它事件忽略。
+- `follow_up` 也可在 `finish_stop` 之前下发，同样识别；它不会出现在执行过程里。
+- 取非空字符串、去重后最多 3 条，单条不超过 200 字；随会话保存在本地历史中。
+- 只在最新一条已完成的答复下展示；点击直接提问，若输入框已有草稿或附件则改为填入。
+
 ## 生产集成
 
 页面文件为 `src/views/ux/aiAgent.vue`。将它集成到原门户；`stub/` 和 `src/demo-transport.js` 仅用于独立预览。PDF 解析依赖 `pdfjs-dist`，版本见 package.json。

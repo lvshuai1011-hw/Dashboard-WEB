@@ -49,8 +49,14 @@ window.fetch = async (input, init = {}) => {
       const chars=Array.from(answer); const interval=chars.length>1000?2:45;
       chars.forEach((ch,i)=>at(3800+i*interval,()=>emit({event:'answer',content:ch,messageId:'final'})));
       const end=4200+chars.length*interval;
+      // 演示追问：模型在答复结束前通过 json 事件下发 3 个基于本轮上下文的追问。
+      const followUps=line?(english?['What is the month-over-month growth rate for each month?','Which billing type drove most of the growth from April to June?','Based on this trend, what revenue should we expect in the second half?']:['各月收入的环比增长率分别是多少？','4 到 6 月的收入增长主要来自哪种计费类型？','按这个趋势，下半年收入预计是多少？'])
+        :!textOnly?(english?['How did prepaid revenue change compared with last month?','How is postpaid revenue distributed by region?','What are the user count and ARPU for hybrid billing?']:['预付费收入较上月变化了多少？','后付费收入按地区的分布是怎样的？','混合计费的用户数和 ARPU 分别是多少？'])
+        :(english?['Which tables contain the billing type field?','How do I calculate revenue by month?','How often is the revenue data refreshed?']:['哪些数据表包含计费类型字段？','如何按月份统计收入？','收入数据的更新频率是怎样的？']);
       at(end,()=>emit({event:'finish_stop',messageId:'final'}));
-      at(end+100,()=>{stop();controller.close();});
+      // 追问在结束帧之后约 1.2 秒下发，模拟模型答完再生成追问；随后关闭连接。
+      at(end+1200,()=>emit({event:'json',messageId:'follow-up',content:JSON.stringify({follow_up:followUps})}));
+      at(end+1300,()=>{stop();controller.close();});
     },
     cancel(){stop();}
   });
