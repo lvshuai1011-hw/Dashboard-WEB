@@ -18,13 +18,14 @@
           <p v-if="!filteredHistory.length" class="history-empty">{{ t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY') }}</p>
           <section v-for="group in historyGroups" :key="group.key" class="history-group">
             <h2>{{ group.label }}</h2>
-            <div v-for="chat in group.items" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId }">
-              <button class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')" @click="openHistoryResult(chat)">
+            <div v-for="chat in group.items" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId, renaming: renaming.id === chat.id && renaming.where === 'side' }">
+              <input v-if="renaming.id === chat.id && renaming.where === 'side'" v-model="renaming.value" class="rename-input" maxlength="80" :aria-label="t('AIAGENT.HISTORY.NAME_LABEL')" @keydown.enter.prevent="commitRename" @keydown.esc.stop.prevent="cancelRename" @blur="commitRename" />
+              <button v-else class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')" @click="openHistoryResult(chat)">
                 <span class="history-title">{{ chat.title || t('AIAGENT.HISTORY.UNTITLED') }}</span>
                 <span v-if="historyQuery.trim()" class="history-match">{{ historyMatch(chat) }}</span>
                 <i v-if="['running', 'failed', 'stopped'].includes(chatState(chat))" class="history-dot" :class="chatState(chat)" :title="t(chatStateKeys[chatState(chat)])" aria-hidden="true" />
               </button>
-              <el-dropdown trigger="click" placement="bottom-end" popper-class="agent-menu" @command="(command: string) => onChatCommand(chat, command)">
+              <el-dropdown v-if="!(renaming.id === chat.id && renaming.where === 'side')" trigger="click" placement="bottom-end" popper-class="agent-menu" @command="(command: string) => onChatCommand(chat, command, 'side')">
                 <button class="history-more" type="button" :aria-label="uiCopy.more"><el-icon><MoreIcon /></el-icon></button>
                 <template #dropdown>
                   <el-dropdown-menu>
@@ -48,7 +49,8 @@
 
         <!-- 顶栏：会话标题即菜单（收藏 / 重命名 / 删除） -->
         <header v-if="messages.length" class="chat-header">
-          <el-dropdown trigger="click" placement="bottom-start" popper-class="agent-menu" @command="(command: string) => onChatCommand(current, command)">
+          <input v-if="renaming.id === current.id && renaming.where === 'header'" v-model="renaming.value" class="rename-input header" maxlength="80" :aria-label="t('AIAGENT.HISTORY.NAME_LABEL')" @keydown.enter.prevent="commitRename" @keydown.esc.stop.prevent="cancelRename" @blur="commitRename" />
+          <el-dropdown v-else trigger="click" placement="bottom-start" popper-class="agent-menu" @command="(command: string) => onChatCommand(current, command, 'header')">
             <button class="chat-title" type="button">
               <el-icon v-if="current.favorite" class="title-star"><StarFilled /></el-icon>
               <span>{{ current.title || t('AIAGENT.HISTORY.UNTITLED') }}</span>
@@ -229,7 +231,15 @@
         <p class="disclaimer">{{ uiCopy.disclaimer }}</p>
       </main>
     </div>
-    <el-dialog :model-value="!!attachmentPreview" :title="attachmentPreview?.name || t('CM.COMMON.PREVIEW')" width="min(760px, 92vw)" :append-to-body="false" @update:model-value="value => { if (!value) attachmentPreview = null; }">
+    <el-dialog :model-value="!!pendingDelete" width="420px" :append-to-body="false" :show-close="false" align-center class="agent-confirm" @update:model-value="value => { if (!value) pendingDelete = null; }">
+      <template #header><h3 class="confirm-title">{{ uiCopy.deleteTitle }}</h3></template>
+      <p class="confirm-body">{{ uiCopy.deleteBody(pendingDelete?.title || t('AIAGENT.HISTORY.UNTITLED')) }}</p>
+      <template #footer>
+        <button type="button" class="dialog-button" @click="pendingDelete = null">{{ t('AIAGENT.BUTTON.CANCEL') }}</button>
+        <button type="button" class="dialog-button danger" @click="confirmDelete">{{ t('AIAGENT.HISTORY.DELETE') }}</button>
+      </template>
+    </el-dialog>
+    <el-dialog :model-value="!!attachmentPreview" :title="attachmentPreview?.name || t('CM.COMMON.PREVIEW')" width="min(760px, 92vw)" :append-to-body="false" class="agent-preview" @update:model-value="value => { if (!value) attachmentPreview = null; }">
       <pre class="attachment-content">{{ attachmentPreview?.content }}</pre>
     </el-dialog>
     <p class="sr-only" role="status" aria-live="polite">{{ t(streaming ? 'AIAGENT.A11Y.GENERATING' : 'AIAGENT.A11Y.READY') }}</p>
@@ -238,7 +248,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
+import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, type InputInstance, type ScrollbarInstance } from 'element-plus';
 import { ArrowDown, Check, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
@@ -1060,13 +1070,13 @@ const welcomeExamples = ['ONE', 'TWO', 'THREE'];
 // ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
 // 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
 const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
-  tryAsking: '试试这样问', fill: '填入',
+  tryAsking: '试试这样问', fill: '填入', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
   searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
   done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
   questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
   steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
 } : {
-  tryAsking: 'Try asking', fill: 'Use',
+  tryAsking: 'Try asking', fill: 'Use', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
   searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
   done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
   questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
@@ -1083,10 +1093,10 @@ const historyGroups = computed(() => {
     { key: 'earlier', label: uiCopy.value.earlier, items: unpinned.value.filter(c => c.updatedAt < week) },
   ].filter(group => group.items.length);
 });
-function onChatCommand(chat: Conversation, command: string) {
+function onChatCommand(chat: Conversation, command: string, where: 'side' | 'header' = 'side') {
   if (command === 'favorite') toggleFavorite(chat);
-  else if (command === 'rename') void renameConversation(chat);
-  else if (command === 'delete') void deleteConversation(chat);
+  else if (command === 'rename') renameConversation(chat, where);
+  else if (command === 'delete') deleteConversation(chat);
 }
 // 右侧提问导航：按滚动位置高亮当前所读的提问。
 const activeQuestionId = ref('');
@@ -1306,28 +1316,35 @@ function toggleFavorite(chat: Conversation) {
   chat.favorite = !chat.favorite;
   persistHistory();
 }
-async function renameConversation(chat: Conversation) {
-  try {
-    const { value } = await ElMessageBox.prompt(t('AIAGENT.HISTORY.NAME_LABEL'), t('AIAGENT.HISTORY.RENAME'), {
-      inputValue: chat.title, confirmButtonText: t('AIAGENT.BUTTON.CONFIRM'), cancelButtonText: t('AIAGENT.BUTTON.CANCEL'),
-      inputValidator: value => !!value?.trim() && Array.from(value.trim()).length <= 80 || t('AIAGENT.HISTORY.NAME_REQUIRED'),
-    });
-    if (!disposed && conversations.value.includes(chat)) { chat.title = value.trim(); persistHistory(); }
-  } catch { /* 用户取消。 */ }
+// 重命名：在侧栏条目或顶栏标题处原地编辑；Enter / 失焦保存，Esc 取消。
+const renaming = reactive({ id: '', where: '' as '' | 'side' | 'header', value: '' });
+function renameConversation(chat: Conversation, where: 'side' | 'header' = 'side') {
+  renaming.id = chat.id; renaming.where = where; renaming.value = chat.title || '';
+  void nextTick(() => { const input = processRoot.value?.querySelector<HTMLInputElement>('input.rename-input'); input?.focus(); input?.select(); });
 }
-async function deleteConversation(chat: Conversation) {
-  try {
-    await ElMessageBox.confirm(t('AIAGENT.HISTORY.DELETE_CONFIRM', { title: chat.title || t('AIAGENT.HISTORY.UNTITLED') }), t('AIAGENT.HISTORY.TITLE'), {
-      confirmButtonText: t('AIAGENT.BUTTON.CONFIRM'), cancelButtonText: t('AIAGENT.BUTTON.CANCEL'), type: 'warning',
-    });
-    if (disposed) return;
-    // 删除会话要把该会话下所有在跑的回答都停掉，否则请求会挂在已删除的消息上。
-    chat.messages.forEach(m => { if (running.has(m.id)) finishRequest(m.id, m, 'stopped'); });
-    conversations.value = conversations.value.filter(c => c.id !== chat.id);
-    if (!conversations.value.length) conversations.value.push(makeConversation());
-    if (chat.id === activeId.value) { activeId.value = conversations.value[0].id; following.value = true; scheduleScroll(); }
-    persistHistory();
-  } catch { /* 用户取消。 */ }
+function cancelRename() { renaming.id = ''; renaming.where = ''; }
+function commitRename() {
+  const chat = conversations.value.find(c => c.id === renaming.id);
+  const value = renaming.value.trim();
+  if (chat && value && value !== chat.title) {
+    if (Array.from(value).length > 80) { ElMessage.warning(t('AIAGENT.HISTORY.NAME_REQUIRED')); return; }
+    chat.title = value; persistHistory();
+  }
+  cancelRename();
+}
+// 删除：自定义确认框，确认后执行原有删除流程。
+const pendingDelete = ref<Conversation | null>(null);
+function deleteConversation(chat: Conversation) { pendingDelete.value = chat; }
+function confirmDelete() {
+  const chat = pendingDelete.value;
+  pendingDelete.value = null;
+  if (!chat || disposed) return;
+  // 删除会话要把该会话下所有在跑的回答都停掉，否则请求会挂在已删除的消息上。
+  chat.messages.forEach(m => { if (running.has(m.id)) finishRequest(m.id, m, 'stopped'); });
+  conversations.value = conversations.value.filter(c => c.id !== chat.id);
+  if (!conversations.value.length) conversations.value.push(makeConversation());
+  if (chat.id === activeId.value) { activeId.value = conversations.value[0].id; following.value = true; scheduleScroll(); }
+  persistHistory();
 }
 function makeMessage(role: ChatMessage['role'], content: string, prompt = ''): ChatMessage {
   return { id: uid(), role, content, prompt, status: role === 'user' ? 'completed' : 'waiting', createdAt: Date.now(), process: [] };
@@ -2459,7 +2476,26 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .attachment-drop .el-icon { font-size: 30px; }
 .attachment-drop span { font-size: 12.5px; color: var(--muted); }
 .attachment-content { max-height: 58vh; margin: 0; padding: 16px; overflow: auto; border-radius: 8px; background: var(--fill-soft); color: var(--ink); font: 12px/1.75 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.agent-page :deep(.el-dialog) { border-radius: 12px; }
+/* 弹框：删除确认与附件预览 */
+.agent-page :deep(.el-overlay) { background: rgba(31,35,41,.32); }
+.agent-page :deep(.el-dialog) { --el-dialog-padding-primary: 0; padding: 0; border-radius: 14px; box-shadow: 0 16px 48px rgba(31,35,41,.18); overflow: hidden; }
+.agent-page :deep(.agent-confirm .el-dialog__header) { margin: 0; padding: 22px 24px 0; }
+.agent-page :deep(.agent-confirm .el-dialog__body) { padding: 10px 24px 0; }
+.agent-page :deep(.agent-confirm .el-dialog__footer) { display: flex; justify-content: flex-end; gap: 10px; padding: 22px 24px 20px; }
+.confirm-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); }
+.confirm-body { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.dialog-button { height: 34px; min-width: 72px; padding: 0 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s; }
+.dialog-button:hover { background: var(--fill-soft); border-color: var(--disabled); }
+.dialog-button.danger { border-color: var(--danger); background: var(--danger); color: #fff; }
+.dialog-button.danger:hover { border-color: #d83931; background: #d83931; }
+.agent-page :deep(.agent-preview .el-dialog__header) { margin: 0; padding: 18px 20px 12px; border-bottom: 1px solid var(--line-soft); }
+.agent-page :deep(.agent-preview .el-dialog__title) { font-size: 15px; font-weight: 600; color: var(--ink); }
+.agent-page :deep(.agent-preview .el-dialog__headerbtn) { top: 8px; right: 8px; }
+.agent-page :deep(.agent-preview .el-dialog__body) { padding: 16px 20px 20px; }
+/* 原地重命名 */
+.rename-input { flex: 1; min-width: 0; height: 36px; margin: 0; padding: 0 10px; border: 1px solid var(--blue); border-radius: 8px; outline: 0; background: #fff; color: var(--ink); font: inherit; font-size: 13.5px; box-shadow: 0 0 0 3px rgba(22,100,255,.1); }
+.history-item.renaming { background: transparent; }
+.rename-input.header { flex: 0 1 420px; height: 34px; margin-left: -8px; font-size: 15px; font-weight: 500; }
 
 /* ---------- 起始页 ---------- */
 .chat-pane.is-welcome { justify-content: center; padding-bottom: 6vh; }
