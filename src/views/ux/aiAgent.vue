@@ -2469,12 +2469,10 @@ button.step-row:hover, .step-row.open { background: #eef0f2; }
 .is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: 0 4px 20px rgba(31,35,41,.07); }
 .is-welcome .composer:focus-within { box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 4px 20px rgba(31,35,41,.07); }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
-.examples { margin-top: 14px; padding: 4px 6px 6px; border-radius: 14px; background: var(--fill-soft); }
-.examples-label { margin: 0; padding: 8px 12px 4px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
-.example { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 14px; line-height: 1.6; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .45s ease-out both; animation-delay: calc(140ms + var(--i, 0) * 60ms); }
-.example + .example::before { content: ''; position: absolute; top: 0; left: 12px; right: 12px; height: 1px; background: #e9ebee; transition: opacity .15s; }
-.example:hover, .example:focus-visible { background: var(--hover); color: var(--ink); }
-.example:hover::before, .example:hover + .example::before, .example:focus-visible::before, .example:focus-visible + .example::before { opacity: 0; }
+.examples { margin-top: 12px; }
+.examples-label { margin: 0; padding: 6px 14px 4px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
+.example { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 9px 14px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 14px; line-height: 1.6; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .45s ease-out both; animation-delay: calc(140ms + var(--i, 0) * 60ms); }
+.example:hover, .example:focus-visible { background: var(--fill); color: var(--ink); }
 .example-text { flex: 1; min-width: 0; }
 .example-hint { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px; color: var(--muted); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
 .example-hint .el-icon { font-size: 13px; }
