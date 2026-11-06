@@ -217,11 +217,12 @@
               <el-tooltip v-else :content="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')"><button type="button" class="send-button" :disabled="!draft.trim() || attachmentReading" :aria-label="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" @click="sendMessage"><el-icon><component :is="editingMessageId ? RefreshRight : Top" /></el-icon></button></el-tooltip>
             </div>
           </div>
+          <!-- 示例问题：直接展示完整问题，不依赖专属图标；增删问题只需改 welcomeExamples 与语言包文案。 -->
           <div v-if="!messages.length" class="examples">
-            <button v-for="example in welcomeExamples" :key="example.key" type="button" class="example" :title="t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${example.key}.PROMPT`))">
-              <span class="example-icon" aria-hidden="true"><el-icon><component :is="example.icon" /></el-icon></span>
-              <span class="example-text"><strong>{{ t(`AIAGENT.EXAMPLE.${example.key}.TITLE`) }}</strong><span>{{ t(`AIAGENT.EXAMPLE.${example.key}.DESCRIPTION`) }}</span></span>
-              <el-icon class="example-arrow" aria-hidden="true"><ArrowRight /></el-icon>
+            <p class="examples-label">{{ uiCopy.tryAsking }}</p>
+            <button v-for="(key, index) in welcomeExamples" :key="key" type="button" class="example" :style="{ '--i': index }" @click="setDraft(t(`AIAGENT.EXAMPLE.${key}.PROMPT`))">
+              <span class="example-text">{{ t(`AIAGENT.EXAMPLE.${key}.PROMPT`) }}</span>
+              <span class="example-hint" aria-hidden="true">{{ uiCopy.fill }}<el-icon><FillIcon /></el-icon></span>
             </button>
           </div>
         </footer>
@@ -238,7 +239,7 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
-import { ArrowDown, ArrowRight, Check, ChatLineRound, Grid, Histogram, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
+import { ArrowDown, Check, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
 import { merge, cloneDeep } from 'lodash-es';
@@ -297,6 +298,7 @@ const ChartLineIcon = lineIcon(['M3 3v16a2 2 0 0 0 2 2h16', 'm19 9-5 5-4-4-3 3']
 const TableIcon = lineIcon(['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M3 9h18', 'M9 9v12']);
 const MoreIcon = lineIcon(['M12 12h.01', 'M19 12h.01', 'M5 12h.01'], 2.4);
 const ChevronIcon = lineIcon(['m6 9 6 6 6-6']);
+const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 // 品牌标识：静止的四方块；生成时同一组方块以折叠动画出现在状态行（ActivityMark）。
@@ -1054,15 +1056,17 @@ const attachmentCopy = computed(() => locale.value.toLowerCase().startsWith('zh'
 });
 const attachmentHint = computed(() => attachmentCopy.value.formats);
 // 起始页示例卡片：顺序与语言包键对应，图标仅作展示。
-const welcomeExamples = [{ key: 'ONE', icon: Histogram }, { key: 'TWO', icon: TrendCharts }, { key: 'THREE', icon: Grid }];
+const welcomeExamples = ['ONE', 'TWO', 'THREE'];
 // ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
 // 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
 const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
+  tryAsking: '试试这样问', fill: '填入',
   searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
   done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
   questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
   steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
 } : {
+  tryAsking: 'Try asking', fill: 'Use',
   searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
   done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
   questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
@@ -2465,16 +2469,18 @@ button.step-row:hover, .step-row.open { background: #eef0f2; }
 .is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: 0 4px 20px rgba(31,35,41,.07); }
 .is-welcome .composer:focus-within { box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 4px 20px rgba(31,35,41,.07); }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
-.examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; animation: rise .45s ease-out .12s both; }
-.example { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--fill-soft); text-align: left; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
-.example:hover { background: #fff; border-color: #c4d6ff; box-shadow: 0 4px 14px rgba(22,100,255,.08); }
-.example-icon { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 9px; background: #fff; color: var(--blue); font-size: 18px; box-shadow: 0 0 0 1px var(--line-soft) inset; }
-.example:hover .example-icon { background: var(--blue-soft); box-shadow: none; }
-.example-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.example-text strong { font-size: 14px; font-weight: 500; color: var(--ink); }
-.example-text span { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
-.example-arrow { flex-shrink: 0; font-size: 13px; color: var(--disabled); transition: color .15s, transform .15s; }
-.example:hover .example-arrow { color: var(--blue); transform: translateX(2px); }
+.examples { margin-top: 14px; padding: 4px 6px 6px; border-radius: 14px; background: var(--fill-soft); }
+.examples-label { margin: 0; padding: 8px 12px 4px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
+.example { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 14px; line-height: 1.6; text-align: left; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; animation: rise .45s ease-out both; animation-delay: calc(140ms + var(--i, 0) * 60ms); }
+.example + .example::before { content: ''; position: absolute; top: 0; left: 12px; right: 12px; height: 1px; background: #e9ebee; transition: opacity .15s; }
+.example::after { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 2px 2px 0; background: var(--blue); opacity: 0; transform: scaleY(.4); transition: opacity .15s, transform .2s; }
+.example:hover, .example:focus-visible { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(31,35,41,.06), 0 0 0 1px var(--line-soft); }
+.example:hover::after, .example:focus-visible::after { opacity: 1; transform: none; }
+.example:hover::before, .example:hover + .example::before, .example:focus-visible::before, .example:focus-visible + .example::before { opacity: 0; }
+.example-text { flex: 1; min-width: 0; }
+.example-hint { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px; color: var(--blue); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
+.example-hint .el-icon { font-size: 13px; }
+.example:hover .example-hint, .example:focus-visible .example-hint { opacity: 1; transform: none; }
 
 /* ---------- Markdown ---------- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
