@@ -2423,8 +2423,8 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
 :deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
 :deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.5555556); transform-origin: top left; }
-:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite; }
-:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: var(--blue); animation-duration: 5.6s; animation-timing-function: cubic-bezier(.5,0,.25,1); animation-iteration-count: infinite; }
+:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; will-change: transform; animation: vds-whole-turn 5.6s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: var(--blue); will-change: transform; animation-duration: 5.6s; animation-timing-function: cubic-bezier(.45,0,.55,1); animation-iteration-count: infinite; }
 :deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-5px,-5px); }
 :deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(5px,-5px); opacity: .62; }
 :deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(5px,5px); opacity: .8; }
@@ -2619,21 +2619,21 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-whole-turn{0%,8%{transform:rotate(-8deg) scale(.88)}25%,34%{transform:rotate(34deg) scale(.92)}51%,58%{transform:rotate(82deg) scale(.78)}76%,84%{transform:rotate(120deg) scale(.91)}100%{transform:rotate(172deg) scale(.88)}}
-@keyframes vds-fold-a{0%,8%,100%{transform:translate(-5px,-5px) rotate(0deg)}25%,34%{transform:translate(0,-7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-6px,-3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-b{0%,8%,100%{transform:translate(5px,-5px) rotate(0deg)}25%,34%{transform:translate(7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(3px,-6px) rotate(25deg) scaleY(.82)}}
-@keyframes vds-fold-c{0%,8%,100%{transform:translate(5px,5px) rotate(0deg)}25%,34%{transform:translate(0,7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(6px,3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-d{0%,8%,100%{transform:translate(-5px,5px) rotate(0deg)}25%,34%{transform:translate(-7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-3px,6px) rotate(25deg) scaleY(.82)}}
+@keyframes vds-whole-turn{0%{transform:rotate(0deg) scale(.88)}25%{transform:rotate(90deg) scale(.92)}50%{transform:rotate(180deg) scale(.8)}75%{transform:rotate(270deg) scale(.91)}100%{transform:rotate(360deg) scale(.88)}}
+@keyframes vds-fold-a{0%,100%{transform:translate(-5px,-5px) rotate(0deg)}25%{transform:translate(0,-7px) rotate(45deg) scale(.94)}50%{transform:translate(-1px,-1px) rotate(0deg) scale(1.18)}75%{transform:translate(-6px,-3px) rotate(25deg) scaleX(.82)}}
+@keyframes vds-fold-b{0%,100%{transform:translate(5px,-5px) rotate(0deg)}25%{transform:translate(7px,0) rotate(45deg) scale(.94)}50%{transform:translate(1px,-1px) rotate(0deg) scale(1.18)}75%{transform:translate(3px,-6px) rotate(25deg) scaleY(.82)}}
+@keyframes vds-fold-c{0%,100%{transform:translate(5px,5px) rotate(0deg)}25%{transform:translate(0,7px) rotate(45deg) scale(.94)}50%{transform:translate(1px,1px) rotate(0deg) scale(1.18)}75%{transform:translate(6px,3px) rotate(25deg) scaleX(.82)}}
+@keyframes vds-fold-d{0%,100%{transform:translate(-5px,5px) rotate(0deg)}25%{transform:translate(-7px,0) rotate(45deg) scale(.94)}50%{transform:translate(-1px,1px) rotate(0deg) scale(1.18)}75%{transform:translate(-3px,6px) rotate(25deg) scaleY(.82)}}
 
 /* 减少动态：关闭其余动效与文字光标；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   :deep(.stream-cursor) { display: none !important; }
-  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
+  :deep(.activity-mark .activity-form) { animation: vds-whole-turn 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 5.6s cubic-bezier(.45,0,.55,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
