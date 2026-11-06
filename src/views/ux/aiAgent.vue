@@ -2428,9 +2428,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
 :deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; animation: mark-in .42s cubic-bezier(.34,1.56,.64,1) backwards; }
 :deep(.activity-layer) { position: absolute; inset: 4px; border-radius: 3.5px; background: var(--blue); will-change: transform; }
-:deep(.activity-layer-a) { opacity: .4; animation: vds-layer-a 4.8s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-layer-b) { opacity: .55; animation: vds-layer-b 2.4s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-layer-c) { inset: 6px; border-radius: 3px; animation: vds-layer-c 4.8s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer-a) { opacity: .4; animation: vds-layer-a 6s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer-b) { opacity: .55; animation: vds-layer-b 3s cubic-bezier(.45,0,.55,1) infinite; }
+:deep(.activity-layer-c) { inset: 6px; border-radius: 3px; animation: vds-layer-c 6s cubic-bezier(.45,0,.55,1) infinite; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2629,9 +2629,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   :deep(.stream-cursor) { display: none !important; }
-  :deep(.activity-mark .activity-layer-a) { animation: vds-layer-a 4.8s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-layer-b) { animation: vds-layer-b 2.4s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-layer-c) { animation: vds-layer-c 4.8s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-a) { animation: vds-layer-a 6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-b) { animation: vds-layer-b 3s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark .activity-layer-c) { animation: vds-layer-c 6s cubic-bezier(.45,0,.55,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
