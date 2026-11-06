@@ -2319,11 +2319,14 @@ button { font: inherit; }
 .trace-counts .el-icon { font-size: 12px; }
 .trace-chevron { flex-shrink: 0; font-size: 14px; color: var(--faint); transform: rotate(-90deg); transition: transform .2s; }
 .process.open .trace-chevron { transform: none; }
-.steps { margin-top: 6px; padding: 4px; border-radius: 10px; background: var(--fill-soft); animation: rise .2s ease-out both; }
+.steps { position: relative; margin: 4px 0 0 -10px; padding: 2px 0; animation: rise .2s ease-out both; }
+/* 一根淡灰细线串起各步骤图标，表达先后顺序；不使用底板与彩色强调。 */
+.steps::before { content: ''; position: absolute; left: 17.5px; top: 20px; bottom: 20px; width: 1px; background: #e5e6eb; }
 .step-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); font-size: 13.5px; text-align: left; }
 button.step-row { cursor: pointer; transition: background .12s; }
-button.step-row:hover, .step-row.open { background: #eef0f2; }
-.step-icon { flex-shrink: 0; font-size: 16px; color: var(--muted); }
+button.step-row:hover .step-name, .step-row.open .step-name { color: var(--ink); }
+button.step-row:hover .step-chevron { color: var(--muted); }
+.step-icon { position: relative; z-index: 1; flex-shrink: 0; font-size: 16px; color: var(--muted); background: #fff; box-shadow: 0 0 0 4px #fff; }
 .step-row.skill { color: var(--faint); font-size: 13px; }
 .step-row.skill .step-icon { color: var(--faint); }
 .step-row.running .step-icon { color: var(--blue); animation: soft-pulse 1.6s ease-in-out infinite; }
@@ -2334,7 +2337,7 @@ button.step-row:hover, .step-row.open { background: #eef0f2; }
 .step-time { flex-shrink: 0; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .step-chevron { flex-shrink: 0; font-size: 13px; color: var(--disabled); transform: rotate(-90deg); transition: transform .2s; }
 .step-row.open .step-chevron { transform: none; }
-.step-detail { margin: 2px 10px 8px 36px; padding: 2px 0 4px 14px; border-left: 2px solid #e4e6e9; font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+.step-detail { margin: -2px 10px 10px 36px; padding: 0; font-size: 13.5px; line-height: 1.8; color: var(--muted); }
 .step-detail h4 { margin: 8px 0 2px; font-size: 12px; font-weight: 500; color: var(--faint); }
 .step-detail h4:first-child { margin-top: 2px; }
 .step-detail .plain { margin: 0; white-space: pre-wrap; }
@@ -2345,7 +2348,7 @@ button.step-row:hover, .step-row.open { background: #eef0f2; }
 .raw-details { margin-top: 6px; }
 .raw-details summary { font-size: 12px; color: var(--faint); cursor: pointer; }
 .raw-details summary:hover { color: var(--blue); }
-.raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border-radius: 8px; background: var(--fill); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
 :deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
