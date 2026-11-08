@@ -2609,7 +2609,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.18em; }
 :deep(.markdown-body strong) { font-weight: 600; color: var(--ink); }
 .answer-part :deep(.markdown-body strong.key-mark) { padding: 1px 2px; border-radius: 3px; background: linear-gradient(var(--mark), var(--mark)) 0 0 / 100% 100% no-repeat; }
-.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep .9s cubic-bezier(.33,0,.2,1) both; }
+.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 1.6s cubic-bezier(.4,0,.3,1) both; }
 @keyframes mark-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
