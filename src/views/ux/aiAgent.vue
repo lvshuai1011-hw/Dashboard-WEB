@@ -142,7 +142,7 @@
                   </div>
 
                   <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
-                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
+                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :highlight="item.id === keyMarkPart(message)" :sweep="justFinished(message)" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
                     <div v-else-if="item.kind === 'chart'" class="result-card">
                       <div class="result-head">
                         <strong>{{ item.chart?.title || t('AIAGENT.CHART.TITLE') }}</strong>
@@ -1762,7 +1762,7 @@ function scatterMerge(chartData: ChartContent): Record<string, unknown> {
 }
 // 展示层图表主题（企业风格）：只在 dealChart 结果上叠加样式，不改变数据、系列与坐标含义。
 // 卡片标题已显示图表名，画布内标题仅在下载 PNG 时临时显示。
-const chartPalette = ['#1664ff', '#14c9c9', '#f7ba1e', '#722ed1', '#f77234', '#3491fa', '#9fdb1d', '#f5319d'];
+const chartPalette = ['#3370ff', '#14c9c9', '#f7ba1e', '#722ed1', '#f77234', '#3491fa', '#9fdb1d', '#f5319d'];
 const asArray = <T,>(value: T | T[] | undefined): T[] => (value == null ? [] : Array.isArray(value) ? value : [value]);
 function polishChartOption(option: Record<string, unknown>, type: ChartType) {
   const muted = '#86909c';
@@ -1774,7 +1774,7 @@ function polishChartOption(option: Record<string, unknown>, type: ChartType) {
   option.tooltip = merge(cloneDeep(option.tooltip ?? {}), {
     backgroundColor: '#fff', borderColor: '#e5e6eb', borderWidth: 1, padding: [8, 12], textStyle: { color: '#1f2329', fontSize: 12 },
     extraCssText: 'border-radius:8px;box-shadow:0 4px 14px rgba(31,35,41,.12);',
-    axisPointer: type === 'bar' || type === 'multi-bar' ? { type: 'shadow', shadowStyle: { color: 'rgba(22,100,255,0.05)' } } : { type: 'line', lineStyle: { color: '#c9cdd4' } },
+    axisPointer: type === 'bar' || type === 'multi-bar' ? { type: 'shadow', shadowStyle: { color: 'rgba(51,112,255,0.05)' } } : { type: 'line', lineStyle: { color: '#c9cdd4' } },
   });
   const showLegend = isPie || series.length > 1;
   option.legend = merge(cloneDeep(option.legend ?? {}), { show: showLegend, icon: 'circle', itemWidth: 8, itemHeight: 8, itemGap: 20, bottom: 0, textStyle: { color: '#4e5969', fontSize: 12 } });
@@ -1783,7 +1783,7 @@ function polishChartOption(option: Record<string, unknown>, type: ChartType) {
     option.xAxis = asArray(option.xAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), base, { axisLine: { show: true, lineStyle: { color: '#e5e6eb' } }, splitLine: { show: axis.type === 'value', lineStyle: { color: '#f2f3f5' } } }));
     option.yAxis = asArray(option.yAxis as Record<string, unknown>).map(axis => merge(cloneDeep(axis), base, { axisLine: { show: false }, splitLine: { lineStyle: { color: '#f2f3f5', type: 'solid' } } }));
     const zoom = !!option.dataZoom;
-    if (zoom) option.dataZoom = (option.dataZoom as Record<string, unknown>[]).map(item => item.type === 'slider' ? { ...item, top: undefined, bottom: showLegend ? 28 : 6, height: 16, borderColor: '#e5e6eb', fillerColor: 'rgba(22,100,255,0.08)', handleStyle: { color: '#fff', borderColor: '#c9cdd4' }, moveHandleSize: 0, textStyle: { color: muted } } : item);
+    if (zoom) option.dataZoom = (option.dataZoom as Record<string, unknown>[]).map(item => item.type === 'slider' ? { ...item, top: undefined, bottom: showLegend ? 28 : 6, height: 16, borderColor: '#e5e6eb', fillerColor: 'rgba(51,112,255,0.08)', handleStyle: { color: '#fff', borderColor: '#c9cdd4' }, moveHandleSize: 0, textStyle: { color: muted } } : item);
     option.grid = { top: 28, left: 4, right: 20, bottom: (showLegend ? 28 : 4) + (zoom ? 30 : 0), containLabel: true };
   }
   series.forEach((item, index) => {
@@ -2207,8 +2207,16 @@ function typingChunk(pending: string): string {
   }
   return pending.slice(0, offset);
 }
+// 刚完成（1.5 秒内）的答复在落入正文时播放高亮动画；刷新、切换会话加载的历史不播放。
+function justFinished(message: ChatMessage) {
+  return message.status === 'completed' && !!message.finishedAt && Date.now() - message.finishedAt < 1500;
+}
+// 正文中第一个含 **加粗** 的文本块；整条回答只高亮这一处。
+function keyMarkPart(message: ChatMessage) {
+  return layout(message).body.find(item => item.kind === 'text' && /\*\*[^*\n]+\*\*/.test(item.text))?.id;
+}
 const Typewriter = defineComponent({
-  props: { content: { type: String, required: true }, active: Boolean, cursor: { type: Boolean, default: true } }, emits: ['progress'],
+  props: { content: { type: String, required: true }, active: Boolean, highlight: Boolean, sweep: Boolean, cursor: { type: Boolean, default: true } }, emits: ['progress'],
   setup(props, { emit }) {
     const displayed = ref(''); let observed = '', pending = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -2234,8 +2242,19 @@ const Typewriter = defineComponent({
     const root = ref<HTMLElement>(); let openStates: boolean[] = [];
     const captureDetails = () => { openStates = Array.from(root.value?.querySelectorAll('details') || []).map(el => el.open); };
     const restoreDetails = () => { root.value?.querySelectorAll('details').forEach((el, i) => { if (i < openStates.length) el.open = openStates[i]; }); };
+    // 重点高亮（参考 Google AI 模式）：只给正文第一处 **加粗** 加浅蓝底。
+    // 答复刚落到正文时（sweep）像荧光笔一样从左到右刷出；历史消息直接显示底色，不播放动画。
+    // innerHTML 更新会重建节点，按挂载时间算负的 animation-delay 接续进度，避免动画重播。
+    const mountedAt = performance.now();
+    const paintMarks = () => {
+      const el = props.highlight ? root.value?.querySelector('strong') : null;
+      if (!el) return;
+      el.classList.add('key-mark');
+      if (props.sweep && !reducedMotion.value) { el.classList.add('mark-sweep'); el.style.animationDelay = `${mountedAt - performance.now() + 280}ms`; }
+    };
+    const updated = () => { restoreDetails(); paintMarks(); };
     return () => h('div', { class: ['typewriter', { active: props.active }] }, [
-      h('div', { ref: root, class: 'markdown-body', innerHTML: html.value, onClick: copyCode, onToggleCapture: scheduleScroll, onVnodeBeforeUpdate: captureDetails, onVnodeUpdated: restoreDetails }),
+      h('div', { ref: root, class: 'markdown-body', innerHTML: html.value, onClick: copyCode, onToggleCapture: scheduleScroll, onVnodeBeforeUpdate: captureDetails, onVnodeMounted: paintMarks, onVnodeUpdated: updated }),
     ]);
   },
 });
@@ -2284,15 +2303,15 @@ onUnmounted(() => {
 });
 </script>
 <style scoped lang="less">
-/* 企业浅色风格：中性灰 + 主题蓝 #1664FF；仅网页端；不依赖外部字体与样式。 */
+/* 企业浅色风格：中性灰 + 主题蓝 #3370FF；仅网页端；不依赖外部字体与样式。 */
 :global(html), :global(body), :global(#app) { height: 100%; width: 100%; min-width: 0; min-height: 0; margin: 0; box-sizing: border-box; }
 .agent-page {
-  --blue: #1664ff; --blue-hover: #0e54e0; --blue-soft: #eef3ff;
+  --blue: #3370ff; --blue-hover: #245bdb; --blue-soft: #f0f4ff; --mark: #d9e5ff;
   --ink: #1f2329; --ink-2: #373c43; --muted: #646a73; --faint: #8f959e; --disabled: #c9cdd4;
   --line: #dee0e3; --line-soft: #eff0f1; --fill: #f2f3f5; --fill-soft: #f7f8fa; --hover: #eceef1;
   --success: #00a870; --danger: #f54a45; --warning: #ff8800;
   --content-width: 800px;
-  --el-color-primary: #1664ff;
+  --el-color-primary: #3370ff;
   --el-font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   height: 100%; width: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
   background: #fff; color: var(--ink); font-family: var(--el-font-family); font-size: 14px;
@@ -2450,7 +2469,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .follow-ups { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 16px; }
 .follow-up { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 36px; padding: 7px 14px; border: 0; border-radius: 10px; background: var(--fill-soft); color: var(--ink-2); font-size: 14px; line-height: 1.55; text-align: left; cursor: pointer; transition: background .15s, color .15s; animation: rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 60ms); }
 .follow-up > span { min-width: 0; }
-.follow-up:hover, .follow-up:focus-visible { background: #eef3ff; color: var(--blue); outline: none; }
+.follow-up:hover, .follow-up:focus-visible { background: var(--blue-soft); color: var(--blue); outline: none; }
 .follow-icon { flex-shrink: 0; width: 14px; height: 14px; color: var(--faint); transition: color .15s, transform .15s; }
 .follow-up:hover .follow-icon, .follow-up:focus-visible .follow-icon { color: var(--blue); transform: translateX(2px); }
 
@@ -2501,7 +2520,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* ---------- 输入区 ---------- */
 .composer-region { flex-shrink: 0; width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 4px 40px 0; }
 .composer { padding: 12px 12px 10px 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 2px 10px rgba(31,35,41,.05); transition: border-color .15s, box-shadow .15s; }
-.composer:focus-within { border-color: #a9c3ff; box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 2px 10px rgba(31,35,41,.05); }
+.composer:focus-within { border-color: #a9c3ff; box-shadow: 0 0 0 3px rgba(51,112,255,.08), 0 2px 10px rgba(31,35,41,.05); }
 .composer :deep(.el-textarea__inner) { padding: 2px 0; border: 0; box-shadow: none; background: transparent; color: var(--ink); font-family: inherit; font-size: 14.5px; line-height: 1.7; }
 .composer :deep(.el-textarea__inner::placeholder) { color: var(--faint); }
 .composer-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
@@ -2555,20 +2574,20 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .agent-page :deep(.agent-preview .el-dialog__headerbtn) { top: 8px; right: 8px; }
 .agent-page :deep(.agent-preview .el-dialog__body) { padding: 16px 20px 20px; }
 /* 原地重命名 */
-.rename-input { flex: 1; min-width: 0; height: 36px; margin: 0; padding: 0 10px; border: 1px solid var(--blue); border-radius: 8px; outline: 0; background: #fff; color: var(--ink); font: inherit; font-size: 13.5px; box-shadow: 0 0 0 3px rgba(22,100,255,.1); }
+.rename-input { flex: 1; min-width: 0; height: 36px; margin: 0; padding: 0 10px; border: 1px solid var(--blue); border-radius: 8px; outline: 0; background: #fff; color: var(--ink); font: inherit; font-size: 13.5px; box-shadow: 0 0 0 3px rgba(51,112,255,.1); }
 .history-item.renaming { background: transparent; }
 .rename-input.header { flex: 0 1 420px; height: 34px; margin-left: -8px; font-size: 15px; font-weight: 500; }
 
 /* ---------- 起始页 ---------- */
 .chat-pane.is-welcome { justify-content: center; padding-bottom: 6vh; }
 .welcome { display: flex; flex-direction: column; align-items: center; padding: 0 40px 28px; text-align: center; animation: rise .45s ease-out both; }
-.welcome :deep(.welcome-mark) { width: 48px; height: 48px; gap: 4px; padding: 11px; border-radius: 13px; box-shadow: 0 8px 20px -8px rgba(22,100,255,.55); }
+.welcome :deep(.welcome-mark) { width: 48px; height: 48px; gap: 4px; padding: 11px; border-radius: 13px; box-shadow: 0 8px 20px -8px rgba(51,112,255,.55); }
 .welcome :deep(.welcome-mark i) { border-radius: 3px; }
 .welcome-title { margin: 22px 0 0; font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .5px; color: var(--ink); }
 .welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
 .is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: 0 4px 20px rgba(31,35,41,.07); }
-.is-welcome .composer:focus-within { box-shadow: 0 0 0 3px rgba(22,100,255,.08), 0 4px 20px rgba(31,35,41,.07); }
+.is-welcome .composer:focus-within { box-shadow: 0 0 0 3px rgba(51,112,255,.08), 0 4px 20px rgba(31,35,41,.07); }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
 .examples { margin-top: 12px; }
 .examples-label { margin: 0; padding: 6px 14px 4px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
@@ -2589,6 +2608,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3), :deep(.markdown-body h4), :deep(.markdown-body h5), :deep(.markdown-body h6) { margin: 22px 0 10px; line-height: 1.5; font-size: 1.08em; font-weight: 600; color: var(--ink); }
 :deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.18em; }
 :deep(.markdown-body strong) { font-weight: 600; color: var(--ink); }
+.answer-part :deep(.markdown-body strong.key-mark) { padding: 1px 2px; border-radius: 3px; background: linear-gradient(var(--mark), var(--mark)) 0 0 / 100% 100% no-repeat; }
+.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep .9s cubic-bezier(.33,0,.2,1) both; }
+@keyframes mark-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
 :deep(.markdown-body li::marker) { color: var(--faint); }
