@@ -1,9 +1,7 @@
 <template>
   <section ref="processRoot" class="agent-page" :aria-label="t('AIAGENT.BRAND')" @keydown="onWorkspaceKeydown">
     <div class="workspace">
-      <component :is="mobile ? ElDrawer : 'aside'" v-if="mobile || sidebarOpen" class="history-panel"
-        v-bind="mobile ? { direction: 'ltr', size: 'min(300px, 88vw)', title: t('AIAGENT.HISTORY.TITLE'), bodyClass: 'agent-history-body', headerClass: 'agent-history-header', appendToBody: false } : {}"
-        :model-value="drawerOpen" @update:model-value="drawerOpen = $event" @opened="onHistoryDrawerOpened" @closed="historySearchPending = false">
+      <aside v-if="sidebarOpen" class="history-panel">
         <div class="history-content">
         <div class="history-brand">
           <h1>{{ t('AIAGENT.BRAND') }}</h1>
@@ -41,10 +39,9 @@
         </el-scrollbar>
         <p v-if="storageWarning" class="history-note warning" role="alert">{{ t(storageWarning) }}</p>
         </div>
-      </component>
-      <!-- 展示层修复：窄屏抽屉关闭时也保留原有历史入口，复用 toggleSidebar。 -->
-      <el-tooltip v-if="mobile || !sidebarOpen" :content="t('AIAGENT.HISTORY.TOGGLE')" placement="right">
-        <button class="panel-handle" type="button" :aria-label="t('AIAGENT.HISTORY.TOGGLE')" :aria-expanded="mobile ? drawerOpen : sidebarOpen" @click="toggleSidebar"><el-icon><Fold /></el-icon></button>
+      </aside>
+      <el-tooltip v-if="!sidebarOpen" :content="t('AIAGENT.HISTORY.TOGGLE')" placement="right">
+        <button class="panel-handle" type="button" :aria-label="t('AIAGENT.HISTORY.TOGGLE')" :aria-expanded="sidebarOpen" @click="toggleSidebar"><el-icon><Fold /></el-icon></button>
       </el-tooltip>
       <main class="chat-pane" :class="{ 'chat-pane--welcome': !messages.length }" @dragenter="onAttachmentDragEnter" @dragover="onAttachmentDragOver" @dragleave="onAttachmentDragLeave" @drop="onAttachmentDrop">
         <div v-if="attachmentDragDepth" class="attachment-drop" aria-hidden="true"><el-icon><Paperclip /></el-icon><strong>{{ attachmentCopy.add }}</strong><span>{{ attachmentHint }}</span></div>
@@ -62,26 +59,9 @@
         </nav>
         <div class="chat-scroll-area">
           <el-scrollbar ref="scrollRef" class="message-scroll" :class="{ 'message-scroll--welcome': !messages.length }" @scroll="onScroll">
-            <div v-if="!messages.length" class="welcome">
-              <!-- 起始页只保留可操作的预制问题；不再重复品牌、标题、说明和装饰。 -->
-              <div class="suggestions">
-                <button v-for="key in ['ONE', 'TWO', 'THREE']" :key="key" type="button" class="suggestion" :title="t(`AIAGENT.EXAMPLE.${key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${key}.PROMPT`))">
-                  {{ t(`AIAGENT.EXAMPLE.${key}.DESCRIPTION`) }}
-                </button>
-              </div>
-            </div>
-            <div v-else class="message-list" role="log" aria-live="off" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
+            <div v-if="messages.length" class="message-list" role="log" aria-live="off" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
               <article v-for="message in messages" :id="`chat-message-${message.id}`" :key="message.id" class="message-row" :class="[message.role, { located: locatedMessageId === message.id }]" tabindex="-1">
                 <div class="message-column">
-                  <!-- 按本轮反馈：生成状态统一到过程入口，不再另设消息头胶囊。 -->
-                  <div v-if="!isActive(message)" class="message-meta">
-                    <time v-if="message.role === 'user' || (!isActive(message) && !message.finishedAt)" class="message-time" :datetime="new Date(message.createdAt).toISOString()">{{ formatTime(message.createdAt) }}</time>
-                    <!-- 结束异常/中断不能沿用“完成于”文案；仅调整呈现，复用现有状态与耗时键。 -->
-                    <span v-if="message.finishedAt && !isActive(message)" class="message-time finished">
-                      <template v-if="message.status === 'completed'">{{ finishText(message) }}</template>
-                      <template v-else>{{ t(statusKeys[message.status]) }} · {{ t('AIAGENT.STATUS.ELAPSED', { seconds: ((message.finishedAt - message.createdAt) / 1000).toFixed(1) }) }}</template>
-                    </span>
-                  </div>
                   <div class="bubble">
                     <template v-if="message.role === 'user'">
                       <p class="user-content">{{ message.content }}</p>
@@ -93,18 +73,19 @@
                       <!-- 单一状态入口：连接、执行、输出沿用同一行视觉；过程默认收起，保留手动选择。 -->
                       <div v-if="isActive(message) && !message.process.length" class="waiting">
                         <ActivityMark />
-                        <span class="live-step">{{ t(statusKeys[message.status]) }}</span>
+                        <span class="live-step-box"><span class="live-step">{{ t(statusKeys[message.status]) }}</span></span>
                         <span class="status-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
                       </div>
-                      <div v-if="message.process.length" class="process-trace" :class="[{ live: isActive(message) }, message.status]">
+                      <div v-if="message.process.length" class="process-trace" :class="[{ live: isActive(message), open: traceOpen(message) }, message.status]">
                         <button class="trace-toggle" type="button" :data-message-id="message.id" :aria-expanded="traceOpen(message)" :aria-controls="`trace-${message.id}`">
                           <template v-if="isActive(message)">
                             <ActivityMark />
-                            <span class="live-step">{{ liveLabel(message) }}</span>
+                            <span class="live-step-box"><Transition name="roll" type="transition" mode="out-in" appear><span :key="liveLabel(message)" class="live-step">{{ liveLabel(message) }}</span></Transition></span>
                             <span class="status-elapsed">{{ t('AIAGENT.STATUS.ELAPSED', { seconds: Math.floor(Math.max(0, now - message.createdAt) / 1000) }) }}</span>
                           </template>
                           <template v-else>
-                            <el-icon class="trace-result" aria-hidden="true"><component :is="message.status === 'error' ? CircleClose : message.status === 'stopped' ? VideoPause : CircleCheck" /></el-icon>
+                            <svg v-if="message.status === 'completed'" class="trace-result trace-check" :class="{ fresh: justFinished(message) }" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M3.5 9.5l3.5 3.5 7.5-8" /></svg>
+                            <el-icon v-else class="trace-result" aria-hidden="true"><component :is="message.status === 'error' ? CircleClose : VideoPause" /></el-icon>
                             <span>{{ t('AIAGENT.PROCESS.TITLE') }}</span><span v-if="message.status === 'error' || message.status === 'stopped'" class="trace-outcome">{{ t(statusKeys[message.status]) }}</span><span class="count">{{ layout(message).timeline.length }}</span>
                           </template>
                           <el-icon class="chevron" :class="{ expanded: traceOpen(message) }"><ArrowRight /></el-icon>
@@ -185,6 +166,7 @@
                     </template>
                   </div>
                   <div v-if="message.role === 'user'" class="question-actions">
+                    <time class="message-time" :datetime="new Date(message.createdAt).toISOString()">{{ formatTime(message.createdAt) }}</time>
                     <el-tooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')"><button type="button" class="utility-button" :disabled="streaming || attachmentReading" :aria-label="t('AIAGENT.BUTTON.EDIT_QUESTION')" @click="editQuestion(message)"><el-icon><EditPen /></el-icon></button></el-tooltip>
                   </div>
                   <div v-if="message.role === 'assistant' && !isActive(message)" class="message-actions">
@@ -193,6 +175,12 @@
                     <el-tooltip :content="t('CM.COMMON.YES')"><button type="button" class="utility-button feedback-button" :class="{ selected: feedback.get(message.id) === 'up' }" :aria-label="t('CM.COMMON.YES')" :aria-pressed="feedback.get(message.id) === 'up'" @click="setFeedback(message, 'up')"><FeedbackIcon /></button></el-tooltip>
                     <el-tooltip :content="t('CM.COMMON.NOT')"><button type="button" class="utility-button feedback-button" :class="{ selected: feedback.get(message.id) === 'down' }" :aria-label="t('CM.COMMON.NOT')" :aria-pressed="feedback.get(message.id) === 'down'" @click="setFeedback(message, 'down')"><FeedbackIcon down /></button></el-tooltip>
                     <el-button v-if="canRegenerate(message)" text size="small" :icon="RefreshRight" :disabled="streaming" @click="regenerate(message)">{{ t('AIAGENT.BUTTON.REGENERATE') }}</el-button>
+                    <!-- 完成时间与耗时收到操作行末尾；异常/中断不沿用“完成于”文案。 -->
+                    <span class="message-stamp">
+                      <template v-if="!message.finishedAt">{{ formatTime(message.createdAt) }}</template>
+                      <template v-else-if="message.status === 'completed'">{{ finishText(message) }}</template>
+                      <template v-else>{{ t(statusKeys[message.status]) }} · {{ t('AIAGENT.STATUS.ELAPSED', { seconds: ((message.finishedAt - message.createdAt) / 1000).toFixed(1) }) }}</template>
+                    </span>
                   </div>
                 </div>
               </article>
@@ -223,14 +211,20 @@
                 <!-- 用户选择简短说明：悬停或键盘聚焦显示，随 locale 切换，不增加外部 t() 键。 -->
                 <el-tooltip placement="top-start" effect="light" :trigger="['hover', 'focus']" :show-after="100" :hide-after="100">
                   <template #content><div class="attachment-format-hint">{{ attachmentCopy.formatsSummary }}</div></template>
-                  <button type="button" class="attachment-info" :aria-label="attachmentCopy.formatsTitle"><el-icon><InfoFilled /></el-icon></button>
+                  <button type="button" class="attachment-info" :aria-label="attachmentCopy.formatsTitle"><InfoIcon /></button>
                 </el-tooltip>
                 <span v-if="attachmentReading" role="status">{{ t('CM.COMMON.UPLOADING_FILE') }}</span>
                 <span v-else-if="streaming" class="next-draft">{{ t('AIAGENT.INPUT.NEXT_DRAFT') }}</span>
               </div>
-              <el-button v-if="streaming" class="stop-button" :icon="VideoPause" @click="stopGeneration">{{ t('AIAGENT.BUTTON.STOP') }}</el-button>
+              <el-button v-if="streaming" class="stop-button" :aria-label="t('AIAGENT.BUTTON.STOP')" :title="t('AIAGENT.BUTTON.STOP')" @click="stopGeneration"><i class="stop-glyph" aria-hidden="true" /></el-button>
               <el-button v-else class="send-button" type="primary" :icon="editingMessageId ? RefreshRight : Top" :aria-label="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" :title="t(editingMessageId ? 'AIAGENT.BUTTON.REGENERATE' : 'AIAGENT.BUTTON.SEND')" :disabled="!draft.trim() || attachmentReading" @click="sendMessage" />
             </div>
+          </div>
+          <!-- 起始页只保留可操作的预制问题，紧跟在输入框下方；不重复品牌、标题、说明和装饰。 -->
+          <div v-if="!messages.length" class="suggestions">
+            <button v-for="key in ['ONE', 'TWO', 'THREE']" :key="key" type="button" class="suggestion" :title="t(`AIAGENT.EXAMPLE.${key}.PROMPT`)" @click="setDraft(t(`AIAGENT.EXAMPLE.${key}.PROMPT`))">
+              {{ t(`AIAGENT.EXAMPLE.${key}.DESCRIPTION`) }}
+            </button>
           </div>
         </footer>
       </main>
@@ -244,8 +238,8 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElButton, ElInput, ElIcon, ElTooltip, ElEmpty, ElScrollbar, ElDrawer, ElDialog, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
-import { ArrowDown, ArrowRight, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, Fold, InfoFilled, Loading, Operation, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
+import { ElButton, ElInput, ElIcon, ElTooltip, ElEmpty, ElScrollbar, ElDialog, ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from 'element-plus';
+import { ArrowDown, ArrowRight, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, Fold, Loading, Operation, Paperclip, Plus, Top, RefreshRight, Search, Star, StarFilled, TrendCharts, VideoPause, Warning } from '@element-plus/icons-vue';
 import { useLoginStore } from '~/store';
 import * as echarts from 'echarts';
 import { merge, cloneDeep } from 'lodash-es';
@@ -292,14 +286,16 @@ const SkillIcon = defineComponent({
     h('path', { d: 'M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z' }),
   ]),
 });
-// 用户已确认的单枚折叠标识：沿用示例的形变轨迹和 5.6 秒节奏；不由 token 更新驱动。
-// 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
+// 生成状态标识「看板重排」：四块看板卡片不断重新分配大小；完成时由过程入口的对勾接替。
+// 纯 CSS 驱动，不由 token 更新驱动。用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
-  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [
-    h('span', { class: 'activity-scale' }, [h('span', { class: 'activity-form' }, [
-      ...['a', 'b', 'c', 'd'].map(part => h('i', { class: `activity-fold activity-fold-${part}` })),
-      h('i', { class: 'activity-core' }),
-    ])]),
+  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' },
+    ['a', 'b', 'c', 'd'].map(part => h('i', { class: `activity-tile activity-tile-${part}` }))),
+});
+// 与回形针同为细线风格的说明图标。
+const InfoIcon = defineComponent({
+  setup: () => () => h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [
+    h('circle', { cx: 12, cy: 12, r: 9 }), h('path', { d: 'M12 11v5.5M12 7.6v.2' }),
   ]),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
@@ -949,7 +945,6 @@ const draft = computed({ get: () => current.value.draft, set: value => { current
 
 // 会话定位和快捷键仅改变本地展示。
 const historySearchRef = ref<InputInstance>();
-const historySearchPending = ref(false);
 const outlineButton = ref<HTMLButtonElement>();
 const outlineOpen = ref(false);
 const locatedMessageId = ref(''), copiedMessageId = ref('');
@@ -980,11 +975,7 @@ async function openHistoryResult(chat: Conversation) {
   const match = query ? chat.messages.find(message => messageMatches(message, query)) : undefined;
   if (match) { if (match.role === 'assistant') traceOverride.set(match.id, true); await jumpToMessage(match.id); }
 }
-function onHistoryDrawerOpened() {
-  if (historySearchPending.value) { historySearchPending.value = false; historySearchRef.value?.focus(); }
-}
 async function focusHistorySearch() {
-  if (mobile.value && !drawerOpen.value) { historySearchPending.value = true; drawerOpen.value = true; return; }
   sidebarOpen.value = true;
   await nextTick(); historySearchRef.value?.focus();
 }
@@ -1008,8 +999,6 @@ async function copyAnswer(message: ChatMessage) {
 
 const following = ref(true);
 const sidebarOpen = ref(true);
-const drawerOpen = ref(false);
-const mobile = ref(false);
 const reducedMotion = ref(false);
 const now = ref(Date.now());
 const scrollRef = ref<ScrollbarInstance>();
@@ -1155,14 +1144,14 @@ function finishText(message: ChatMessage) {
   if (!message.finishedAt) return '';
   return t('AIAGENT.MESSAGE.DONE_AT', { time: new Intl.DateTimeFormat(locale.value.startsWith('zh') ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(message.finishedAt), seconds: ((message.finishedAt - message.createdAt) / 1000).toFixed(1) });
 }
-function toggleSidebar() { if (mobile.value) drawerOpen.value = !drawerOpen.value; else sidebarOpen.value = !sidebarOpen.value; }
+function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
 function newConversation() {
   rememberReadingPosition(); outlineOpen.value = false;
   historyQuery.value = '';
   // 不再打断正在跑的回答：并发下其它会话的请求独立存活，切回来还能继续看。
   conversations.value = conversations.value.filter(c => c.messages.length || c.title || c.draft || c.attachments?.length);
   const chat = makeConversation(); conversations.value.unshift(chat); activeId.value = chat.id;
-  drawerOpen.value = false; following.value = true; persistHistory();
+  following.value = true; persistHistory();
   void nextTick(() => inputRef.value?.focus());
 }
 function switchConversation(id: string) {
@@ -1171,7 +1160,6 @@ function switchConversation(id: string) {
     activeId.value = id; const position = readingPositions.get(id); following.value = position?.following ?? true; persistHistory();
     void nextTick(() => { if (activeId.value !== id) return; if (following.value) scheduleScroll(); else scrollRef.value?.setScrollTop(position?.top || 0); });
   }
-  drawerOpen.value = false;
 }
 function toggleFavorite(chat: Conversation) {
   chat.favorite = !chat.favorite;
@@ -1289,12 +1277,19 @@ function bodyEntries(message: ChatMessage) {
 // 阶段只从本地观测推断，不依赖上游任何格式约定。
 function liveLabel(message: ChatMessage) {
   const runningTool = message.process.filter(p => (p.kind === 'tool' || p.kind === 'subagent') && p.status === 'running').pop();
-  if (runningTool) return t(runningTool.kind === 'subagent' ? 'AIAGENT.STATUS.SUBAGENT' : 'AIAGENT.STATUS.TOOL');
+  if (runningTool) {
+    // 展示层：执行阶段带上技能/子智能体名，复用既有文案键与名称，不新增语言包键。
+    const base = t(runningTool.kind === 'subagent' ? 'AIAGENT.STATUS.SUBAGENT' : 'AIAGENT.STATUS.TOOL');
+    const name = runningTool.kind === 'tool' ? runningTool.toolName : runningTool.agentName ? processTitle(runningTool) : '';
+    return name ? `${base} ${name}` : base;
+  }
   const text = message.process.filter(p => p.kind === 'text').pop();
   if (text && text.status === 'running') return t('AIAGENT.STATUS.ANSWER');
   if (message.process.some(p => p.kind === 'chart')) return t('AIAGENT.STATUS.RENDERING');
   return message.process.length ? t('AIAGENT.STATUS.THINKING') : t('AIAGENT.STATUS.WAITING');
 }
+// 对勾只在本次生成刚结束时描画一次；翻看历史会话时保持静态。
+function justFinished(message: ChatMessage) { return !!message.finishedAt && Date.now() - message.finishedAt < 1500; }
 // 展示层：只允许最新过程项拥有光标；图表/工具在末尾时不回跳到旧文字。
 function cursorOwner(message: ChatMessage) {
   const item = message.process[message.process.length - 1];
@@ -1439,7 +1434,7 @@ function onProcessClick(event: MouseEvent) {
 // ---- SDA 图表渲染(echarts)----
 // 照搬 Dashboard rdd-agent/MessagePop.vue 的 dealChart/barMerge/lineMerge/pieMerge/scatterMerge,
 // 适配 SDA 新字段(chart_type/series/table_data)。base option 内联(对应 Dashboard chart-option.js)。
-const seriesColors = ['#1677ff', '#4b9b8f', '#c99b48', '#c76d73', '#6c9dbb', '#7976b5', '#b88968', '#7e929f'];
+const seriesColors = ['#2466e0', '#4b9b8f', '#c99b48', '#c76d73', '#6c9dbb', '#7976b5', '#b88968', '#7e929f'];
 const dataZoomConfig: Record<string, unknown>[] = [
   { type: 'inside', xAxisIndex: [0], start: 0, end: 100 },
   { type: 'slider', xAxisIndex: [0], start: 0, end: 100, top: '85%', height: 20, show: true, brushSelect: true },
@@ -1580,6 +1575,27 @@ function scatterMerge(chartData: ChartContent): Record<string, unknown> {
   }
   return merge(cloneDeep(scatterOption), option);
 }
+// 展示层统一修饰：不改各 merge 函数的数据组织，只在出图前收敛视觉。
+// 标题已在卡片头部展示，图内不再重复；单序列不显示图例；网格线、坐标轴、提示框使用页面同一套中性色。
+function polishChart(option: Record<string, unknown>) {
+  const list = (value: unknown) => (Array.isArray(value) ? value : value ? [value] : []) as Record<string, unknown>[];
+  const series = list(option.series);
+  const cartesian = series.some(item => item.type !== 'pie');
+  const axisText = { color: '#7a8494', fontSize: 11 };
+  option.title = merge({}, option.title, { show: false });
+  option.legend = merge({}, option.legend, { show: !cartesian || series.length > 1, bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, itemGap: 16, textStyle: { color: '#58616f', fontSize: 12 } });
+  option.tooltip = merge({}, option.tooltip, { backgroundColor: '#fff', borderColor: '#e6e9ee', borderWidth: 1, padding: [8, 12], textStyle: { color: '#1f2630', fontSize: 12 }, extraCssText: 'box-shadow:0 6px 20px rgba(27,40,59,.10);border-radius:8px;' });
+  if (cartesian) {
+    option.grid = merge({}, option.grid, { top: 28, left: 8, right: 16 }, series.length > 1 ? {} : { bottom: (option.grid as Record<string, unknown> | undefined)?.bottom === '22%' ? '8%' : 8 });
+    for (const axis of list(option.xAxis)) merge(axis, { axisLine: { lineStyle: { color: '#d5dae2' } }, axisTick: { show: false }, axisLabel: axisText, nameTextStyle: { color: '#7a8494', fontSize: 11 }, splitLine: { lineStyle: { color: '#eef1f5' } } });
+    for (const axis of list(option.yAxis)) merge(axis, { axisLine: { show: false }, axisTick: { show: false }, axisLabel: axisText, nameTextStyle: { color: '#7a8494', fontSize: 11 }, splitLine: { lineStyle: { color: '#eef1f5' } } });
+  }
+  for (const item of series) {
+    if (item.type === 'bar' || item.type === 'multi-bar') merge(item, { type: 'bar', barMaxWidth: series.length > 1 ? item.barMaxWidth : 32, itemStyle: { borderRadius: [4, 4, 0, 0] }, emphasis: { focus: series.length > 1 ? 'series' : 'none' } });
+    else if (item.type === 'line') merge(item, { symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 }, smooth: .25, emphasis: { focus: 'series' } }, series.length === 1 ? { areaStyle: { opacity: .07 } } : {});
+    else if (item.type === 'pie') merge(item, { itemStyle: { borderColor: '#fff', borderWidth: 2 }, label: { color: '#58616f' }, labelLine: { lineStyle: { color: '#c9d0da' } } });
+  }
+}
 // 单个图表用独立组件管理 echarts 实例:onMounted init、onUnmounted dispose、ResizeObserver 自适应。
 // 不在 v-for 里用内联函数 ref(每次渲染都会重建闭包,会被 Vue 当作 ref 变化反复 dispose/re-init,图表画不出来)。
 const ChartView = defineComponent({
@@ -1600,6 +1616,7 @@ const ChartView = defineComponent({
         // 展示层统一图表字体/颜色；减少动态时关闭 ECharts 自带插值动画。
         option.animation = !reducedMotion.value;
         option.color = seriesColors;
+        polishChart(option);
         option.textStyle = { fontFamily: 'Huawei Sans, Manrope, Arial, Microsoft YaHei, sans-serif', color: '#58616f' };
         inst.setOption(option, true);
       }
@@ -1999,8 +2016,8 @@ function copyCode(event: MouseEvent) {
   const code = button?.closest('.code-block')?.querySelector('pre code');
   if (code) void copyText(code.textContent ?? '');
 }
-let narrowQuery: MediaQueryList | undefined, motionQuery: MediaQueryList | undefined;
-function syncMedia() { mobile.value = !!narrowQuery?.matches; reducedMotion.value = !!motionQuery?.matches; if (!mobile.value) drawerOpen.value = false; }
+let motionQuery: MediaQueryList | undefined;
+function syncMedia() { reducedMotion.value = !!motionQuery?.matches; }
 // 离开页面/卸载时要停掉**全部**在跑的请求：并发下可能同时有 2~3 条，
 // 只停当前会话那一条会让其余 fetch 悬挂到空闲超时。
 function stopAll() {
@@ -2012,8 +2029,8 @@ onUnmounted(() => document.removeEventListener('keydown', onPageShortcut));
 onMounted(() => {
   processEventRoot = processRoot.value;
   processEventRoot?.addEventListener('click', onProcessClick, true);
-  narrowQuery = window.matchMedia('(max-width: 767px)'); motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-  syncMedia(); narrowQuery.addEventListener('change', syncMedia); motionQuery.addEventListener('change', syncMedia);
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  syncMedia(); motionQuery.addEventListener('change', syncMedia);
   window.addEventListener('pagehide', onPageHide); scheduleScroll();
 });
 onUnmounted(() => { clearTimeout(locatedTimer); clearTimeout(copiedTimer); });
@@ -2021,7 +2038,7 @@ onUnmounted(() => {
   processEventRoot?.removeEventListener('click', onProcessClick, true);
   processEventRoot = undefined;
   stopAll(); persistHistory(); disposed = true; clearTimeout(saveTimer); clearInterval(elapsedTimer);
-  narrowQuery?.removeEventListener('change', syncMedia); motionQuery?.removeEventListener('change', syncMedia);
+  motionQuery?.removeEventListener('change', syncMedia);
   window.removeEventListener('pagehide', onPageHide);
 });
 </script>
@@ -2029,12 +2046,12 @@ onUnmounted(() => {
 /* 浅色门户：阅读区留白、轻量分隔与一套控件尺度；不依赖外部样式或字体下载。 */
 :global(html), :global(body), :global(#app) { height: 100%; width: 100%; min-width: 0; min-height: 0; margin: 0; box-sizing: border-box; }
 .agent-page, .history-panel {
-  --blue: #1677ff; --ink: #252b34; --muted: #737c89; --line: #e6e9ed;
-  --surface: #fff; --surface-soft: #f7f8fa; --hover: #eef1f5; --blue-soft: #eff6ff;
-  --running: #2167c5; --completed: #7a8491; --failed: #b94f57; --stopped: #9a722d;
-  --radius-container: 12px; --radius-card: 10px; --radius-control: 8px;
-  --shadow-float: 0 4px 18px rgba(27,40,59,.09); --content-width: 980px;
-  --el-color-primary: #1677ff;
+  --blue: #2466e0; --ink: #1f2630; --muted: #737c89; --faint: #9aa3b0; --line: #e6e9ee;
+  --surface: #fff; --surface-soft: #f6f7f9; --hover: #edf0f4; --blue-soft: #edf3fd; --shine: #b9c6d9;
+  --running: #2466e0; --completed: #7a8491; --failed: #b94f57; --stopped: #9a722d;
+  --radius-container: 16px; --radius-card: 12px; --radius-control: 8px;
+  --shadow-float: 0 4px 18px rgba(27,40,59,.09); --content-width: 880px;
+  --el-color-primary: #2466e0; --el-color-primary-light-3: #5f8fe9; --el-color-primary-light-5: #91b2f0; --el-color-primary-light-7: #bdd1f6; --el-color-primary-light-9: #e9f0fc; --el-color-primary-dark-2: #1d54bd;
   --el-font-family: 'Huawei Sans', Manrope, Arial, 'San Francisco', Helvetica, Roboto, 'Microsoft YaHei', sans-serif;
   font-family: var(--el-font-family); font-size: 14px; color: var(--ink);
 }
@@ -2057,10 +2074,11 @@ onUnmounted(() => {
 .history-heading { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px 7px; font-size: 12px; font-weight: 550; color: var(--muted); }
 .history-heading > span:first-child { display: flex; align-items: center; gap: 6px; }
 .history-heading .el-icon { color: var(--stopped); font-size: 14px; }
-.count { display: inline-flex; justify-content: center; align-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px; color: var(--muted); background: #eceff3; font-size: 11px; font-variant-numeric: tabular-nums; }
-.history-item { --history-item-bg: var(--surface-soft); position: relative; margin: 2px 8px; border: 1px solid transparent; border-radius: var(--radius-card); }
+.count { display: inline-flex; align-items: center; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.history-item { --history-item-bg: var(--surface-soft); position: relative; margin: 2px 8px; border-radius: var(--radius-control); transition: background-color .15s ease; }
 .history-item:hover, .history-item:focus-within { --history-item-bg: var(--hover); background: var(--history-item-bg); }
-.history-item.selected { --history-item-bg: var(--surface); background: var(--history-item-bg); border-color: #dce3ed; }
+.history-item.selected { --history-item-bg: #e8ecf2; background: var(--history-item-bg); }
+.history-item.selected .history-select strong { font-weight: 600; }
 .history-select { width: 100%; display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px; border: 0; border-radius: var(--radius-control); background: transparent; text-align: left; color: var(--ink); font: inherit; cursor: pointer; }
 .history-select > span { flex: 1; min-width: 0; }
 .history-select strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 550; line-height: 1.6; }
@@ -2084,82 +2102,95 @@ onUnmounted(() => {
 .state-dot.stopped { color: var(--stopped); }
 .state-dot.stopped::before, .state-dot.stopped::after { content: ''; position: absolute; width: 2px; height: 8px; top: 2px; left: 3px; border-radius: 1px; background: currentColor; }
 .state-dot.stopped::after { left: 7px; }
-/* 展示调整：操作浮在标题行末尾，保留原按钮/事件与 Tab 顺序；触屏始终可见。 */
+/* 展示调整：操作浮在标题行末尾，保留原按钮/事件与 Tab 顺序。 */
 .history-actions { position: absolute; right: 6px; top: 6px; display: flex; gap: 1px; padding-left: 10px; background: linear-gradient(to right,transparent,var(--history-item-bg) 10px); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 .history-item:hover .history-actions, .history-item:focus-within .history-actions { opacity: 1; pointer-events: auto; }
 .history-actions :deep(.el-button) { margin: 0; width: 25px; height: 26px; padding: 4px; border-radius: 6px; color: var(--muted); }
-@media (hover: none), (pointer: coarse) {
-  .history-actions { opacity: 1; pointer-events: auto; padding-left: 0; top: 5px; }
-  .history-actions :deep(.el-button) { width: 28px; height: 28px; }
-  .history-select strong { padding-right: 82px; }
-}
 .history-actions :deep(.el-button.starred) { color: var(--stopped); }
 .history-actions :deep(.el-button .el-icon), .message-actions :deep(.el-icon) { font-size: 15px; }
 .history-actions :deep(.el-button:hover), .message-actions :deep(.el-button:not(:disabled):hover) { background: var(--hover); color: var(--ink); }
 .history-note { margin: 0; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
 .history-note.warning { color: var(--failed); }
-.history-scroll :deep(.el-empty__description p) { font-size: 13px; color: var(--muted); }
-.agent-page :deep(.agent-history-body) { padding: 0; min-height: 0; }
-.agent-page :deep(.agent-history-header) { margin: 0; padding: 16px 18px 8px; color: var(--muted); font-size: 12px; }
+/* 空状态只留一行提示，不使用组件库默认插图。 */
+.history-scroll :deep(.el-empty) { padding: 28px 20px; }.history-scroll :deep(.el-empty__image) { display: none; }
+.history-scroll :deep(.el-empty__description) { margin-top: 0; }.history-scroll :deep(.el-empty__description p) { font-size: 13px; color: var(--faint); }
 .chat-pane { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
 .chat-scroll-area { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+/* 内容滚入标题栏与输入区时渐隐，不再硬切。 */
+.chat-pane:not(.chat-pane--welcome) .chat-scroll-area::before, .chat-pane:not(.chat-pane--welcome) .chat-scroll-area::after { content: ''; position: absolute; left: 0; right: 12px; height: 20px; z-index: 1; pointer-events: none; }
+.chat-pane:not(.chat-pane--welcome) .chat-scroll-area::before { top: 0; background: linear-gradient(var(--surface), rgba(255,255,255,0)); }
+.chat-pane:not(.chat-pane--welcome) .chat-scroll-area::after { bottom: 0; background: linear-gradient(rgba(255,255,255,0), var(--surface)); }
 .message-scroll { height: 100%; flex: 1; min-height: 0; min-width: 0; }
 .message-scroll :deep(.el-scrollbar__wrap) { overscroll-behavior: contain; }
 .message-scroll :deep(.el-scrollbar__view) { min-height: 100%; }
-.message-scroll--welcome :deep(.el-scrollbar__view) { height: 100%; min-height: 0; container: agent-welcome / size; }
-.welcome { display: flex; align-items: flex-end; width: 100%; min-height: 100%; max-width: var(--content-width); margin: 0 auto; padding: 24px 40px 16px; }
-.suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }
-.suggestion { padding: 11px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: #fff; color: #586374; font: inherit; font-size: 13px; line-height: 1.5; cursor: pointer; text-align: left; }
-.suggestion:hover { background: #f7f9fc; border-color: #cdd5e1; color: var(--ink); }
-.chat-pane--welcome .composer-region { padding-top: 0; padding-bottom: clamp(40px, 30vh, 300px); }
-@container agent-welcome (max-width: 600px) { .welcome { padding: 16px 20px; }.suggestions { gap: 8px; }.suggestion { padding: 9px 12px; font-size: 12px; } }
-@container agent-welcome (max-height: 180px) { .welcome { padding-top: 12px; }.suggestion { padding: 7px 10px; } }
-.message-list { width: 100%; max-width: var(--content-width); margin: auto; padding: 36px 40px 28px; }
-.message-row { display: flex; align-items: flex-start; margin-bottom: 32px; }
+/* 起始页：输入框略高于视觉中心，示例问题作为它的延伸排在下方。 */
+.suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.suggestion { padding: 7px 15px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: #586374; font: inherit; font-size: 13px; line-height: 1.5; cursor: pointer; text-align: left; transition: color .15s ease, border-color .15s ease, background-color .15s ease; }
+.suggestion:hover { background: var(--blue-soft); border-color: #c3d5f5; color: var(--blue); }
+.chat-pane--welcome .composer-region { width: min(760px,100%); padding-top: 0; padding-bottom: clamp(32px, 30vh, 320px); }
+.chat-pane--welcome .composer { box-shadow: 0 1px 2px rgba(27,40,59,.04), 0 12px 32px rgba(27,40,59,.08); }
+.message-list { width: 100%; max-width: var(--content-width); margin: auto; padding: 28px 40px; }
+.message-row { display: flex; align-items: flex-start; margin-bottom: 28px; animation: rise .3s ease both; }
 .message-row:last-child { margin-bottom: 0; }
+.message-row.user { margin-bottom: 6px; }
 .message-row.user { justify-content: flex-end; }
 .message-column { min-width: 0; max-width: 100%; }
 .assistant .message-column { width: 100%; }
 .user .message-column { max-width: 82%; }
-.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 8px; font-size: 12px; }
-.user .message-meta { justify-content: flex-end; min-height: 18px; margin-bottom: 6px; }
-.status-elapsed { flex-shrink: 0; color: #9298a1; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.message-time { color: var(--muted); font-size: 12px; line-height: 20px; font-variant-numeric: tabular-nums; }
-.bubble { line-height: 1.85; font-size: 14px; overflow-wrap: anywhere; }
+.status-elapsed { flex-shrink: 0; color: var(--faint); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.message-time, .message-stamp { color: var(--faint); font-size: 11px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.message-stamp { margin-left: auto; padding-left: 12px; }
+.bubble { line-height: 1.8; font-size: 14px; overflow-wrap: anywhere; }
 /* 助手正文不套卡片；用户提问用轻量填色，与图表/工具详情的边框层次分开。 */
 .assistant .bubble { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.user .bubble { padding: 12px 18px; background: #eef3fa; border: 1px solid transparent; border-radius: var(--radius-container); color: #303b4c; }
+.user .bubble { padding: 10px 16px; background: #edf2fa; border-radius: 16px 16px 4px 16px; color: var(--ink); }
 .user-content, .reasoning-text { margin: 0; white-space: pre-wrap; }
-.message-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 14px; padding-top: 2px; }
-.message-actions :deep(.el-button) { margin: 0; padding: 6px 9px; height: 30px; border-radius: var(--radius-control); color: var(--muted); font-size: 12px; }
+.message-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 12px; }
+.message-actions :deep(.el-button) { margin: 0; padding: 6px 9px; height: 30px; border-radius: var(--radius-control); color: #8590a1; font-size: 12px; }
+.message-actions .utility-button { color: #8590a1; }
 .message-actions :deep(.el-button:disabled) { color: #aeb5bf; }
 .process-trace { margin-bottom: 18px; }
 .process-trace:last-child { margin-bottom: 0; }
 /* 状态入口由内容决定宽度，不再有横跨回答区的背景条；实时文字只出现在展开后的过程。 */
-.trace-toggle { display: inline-flex; align-items: center; gap: 9px; width: auto; max-width: 100%; min-height: 36px; padding: 4px 6px 4px 0; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted); font: inherit; font-size: 12px; line-height: 24px; text-align: left; cursor: pointer; }
-.trace-toggle:hover { color: var(--ink); background: #f7f8fa; }
-.process-trace.live .trace-toggle, .waiting { min-height: 36px; gap: 8px; }
-.live-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #43536b; font-size: 13px; font-weight: 500; }
-/* 缩放层统一收至 24px，保留内部形变轨迹，使标识与状态文字同一行协调。 */
-:deep(.activity-mark) { position: relative; display: block; width: 24px; height: 24px; flex: 0 0 24px; }
-:deep(.activity-scale) { position: absolute; inset: 0 auto auto 0; width: 36px; height: 36px; transform: scale(.6666667); transform-origin: top left; }
-:deep(.activity-form) { position: absolute; left: 2px; top: 2px; width: 32px; height: 32px; isolation: isolate; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite; }
-:deep(.activity-fold) { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 5px; background: #2864e8; animation-duration: 5.6s; animation-timing-function: cubic-bezier(.5,0,.25,1); animation-iteration-count: infinite; }
-:deep(.activity-fold-a) { animation-name: vds-fold-a; transform: translate(-5px,-5px); }
-:deep(.activity-fold-b) { animation-name: vds-fold-b; transform: translate(5px,-5px); }
-:deep(.activity-fold-c) { animation-name: vds-fold-c; transform: translate(5px,5px); }
-:deep(.activity-fold-d) { animation-name: vds-fold-d; transform: translate(-5px,5px); }
-:deep(.activity-core) { position: absolute; inset: 9px; border-radius: 5px; background: #2864e8; }
-.trace-toggle .count { min-width: 0; height: auto; padding: 0; color: #9298a1; background: none; }
+.trace-toggle { display: inline-flex; align-items: center; gap: 8px; width: auto; max-width: calc(100% + 8px); min-height: 34px; margin-left: -8px; padding: 4px 8px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted); font: inherit; font-size: 13px; line-height: 24px; text-align: left; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.trace-toggle:hover { color: var(--ink); background: var(--surface-soft); }
+/* 生成中的文字：一道柔光自左向右扫过；阶段切换时旧文字上移淡出、新文字自下滑入。 */
+.shimmer() { color: transparent; background: linear-gradient(90deg, #43536b 0 38%, var(--shine) 50%, #43536b 62% 100%) 100% 0 / 260% 100%; -webkit-background-clip: text; background-clip: text; animation: text-sweep 2.4s linear infinite; }
+.live-step-box { display: inline-flex; min-width: 0; height: 24px; overflow: hidden; }
+.live-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; .shimmer(); }
+.roll-enter-active, .roll-leave-active { transition: transform .2s ease, opacity .2s ease; }
+.roll-enter-from { transform: translateY(9px); opacity: 0; }.roll-leave-to { transform: translateY(-9px); opacity: 0; }
+@keyframes text-sweep { to { background-position: -62% 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 活动标识「看板重排」：四块卡片按 3.6 秒一轮依次改变分栏，深浅区分主次；完成后由对勾接替并描画一次。 */
+.activity-mark { position: relative; display: block; flex: 0 0 22px; width: 22px; height: 22px; color: var(--blue); }
+:deep(.activity-tile) { position: absolute; border-radius: 2.5px; background: currentColor; animation: 3.6s cubic-bezier(.6,0,.2,1) infinite; }
+:deep(.activity-tile-a) { animation-name: tile-a; }:deep(.activity-tile-b) { animation-name: tile-b; opacity: .42; }
+:deep(.activity-tile-c) { animation-name: tile-c; opacity: .62; }:deep(.activity-tile-d) { animation-name: tile-d; opacity: .26; }
+@keyframes tile-a { 0%,10%,100% { inset: 1px 14px 10px 1px; } 25%,35% { inset: 1px 10px 10px 1px; } 50%,60% { inset: 1px 10px 14px 1px; } 75%,85% { inset: 1px 14px 14px 1px; } }
+@keyframes tile-b { 0%,10%,100% { inset: 1px 1px 14px 10px; } 25%,35% { inset: 1px 1px 14px 14px; } 50%,60% { inset: 1px 1px 10px 14px; } 75%,85% { inset: 1px 1px 10px 10px; } }
+@keyframes tile-c { 0%,10%,100% { inset: 14px 14px 1px 1px; } 25%,35% { inset: 14px 10px 1px 1px; } 50%,60% { inset: 10px 10px 1px 1px; } 75%,85% { inset: 10px 14px 1px 1px; } }
+@keyframes tile-d { 0%,10%,100% { inset: 10px 1px 1px 10px; } 25%,35% { inset: 10px 1px 1px 14px; } 50%,60% { inset: 14px 1px 1px 14px; } 75%,85% { inset: 14px 1px 1px 10px; } }
+.trace-check { width: 18px; height: 18px; margin: 0 2px; }
+.trace-check.fresh path { stroke-dasharray: 1; animation: check-draw .4s ease .08s both; }
+@keyframes check-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.trace-toggle .count::before { content: '·'; margin-right: 6px; }
 .trace-toggle .chevron { margin-left: 1px; font-size: 11px; }
-.trace-result { font-size: 14px; color: var(--completed); flex-shrink: 0; }
+/* 展开后：入口撑满整行，与过程内容合成一个面板，避免短小的入口压在长文字上方。收起时仍由内容决定宽度。 */
+.process-trace.open { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-soft); }
+.process-trace.open .trace-toggle { display: flex; width: 100%; max-width: 100%; min-height: 42px; margin: 0; padding: 8px 14px; border-radius: var(--radius-card); }
+.process-trace.open .trace-toggle:hover { background: transparent; }
+.process-trace.open .trace-toggle .chevron { margin-left: auto; }
+.process-trace.open .timeline { margin: 2px 16px 16px 23px; --dot-ring: var(--surface-soft); }
+.trace-result { font-size: 15px; color: var(--completed); flex-shrink: 0; }
 .trace-outcome { font-size: 12px; }
 .process-trace.error .trace-result, .process-trace.error .trace-outcome { color: var(--failed); }
 .process-trace.stopped .trace-result, .process-trace.stopped .trace-outcome { color: var(--stopped); }
 /* 文字光标只标记当前插入点；主要生成动效始终由状态图标承担。 */
-.timeline { padding: 0 0 0 18px; margin: 16px 0 2px 8px; list-style: none; border-left: 1px solid var(--line); }
-.process-item { position: relative; padding-bottom: 12px; }.process-item:last-child { padding-bottom: 0; }
-.timeline-dot { position: absolute; width: 7px; height: 7px; left: -22px; top: 16px; border-radius: 50%; background: #a9b0bb; box-shadow: 0 0 0 3px var(--surface); }
+.timeline { padding: 0 0 0 18px; margin: 12px 0 2px 8px; list-style: none; border-left: 1px solid var(--line); animation: rise .24s ease both; }
+.process-item { position: relative; padding-bottom: 12px; animation: rise .26s ease both; }.process-item:last-child { padding-bottom: 0; }
+.timeline-dot { position: absolute; width: 7px; height: 7px; left: -22px; top: 16px; border-radius: 50%; background: #a9b0bb; box-shadow: 0 0 0 3px var(--dot-ring, var(--surface)); }
 .running .timeline-dot { background: var(--running); }.error .timeline-dot { background: var(--failed); }.stopped .timeline-dot { background: var(--stopped); }
 /* 保留既有时间线；只有当前请求中仍在执行的步骤显示柔和外环，不改变点位或布局。 */
 .timeline-dot.is-live::after { content: ''; position: absolute; inset: -2px; border: 1px solid var(--running); border-radius: 50%; pointer-events: none; animation: timeline-ring 1.8s ease-out infinite; }
@@ -2169,11 +2200,12 @@ onUnmounted(() => {
 .reasoning-line { padding: 4px 0 8px; color: #626e7f; font-size: 13px; line-height: 1.85; }
 .skill-load-line { display: flex; align-items: center; gap: 6px; padding: 4px 0 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .skill-load-line .el-icon { font-size: 14px; flex-shrink: 0; }
-.process-card { border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--surface-soft); }
-.running .process-card { border-color: #d9e7fa; background: #f8fbff; }
+.process-card { border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--surface); transition: border-color .2s ease, background-color .2s ease; }
+.running .process-card { border-color: #cfdef8; background: #f9fbff; }
+.running .process-title { .shimmer(); }.running .process-state { animation: spin 1.1s linear infinite; }
 .error .process-card { border-color: #edd9dc; background: #fffafa; }.stopped .process-card { border-color: #e9e1d3; background: #fdfbf7; }
 .process-summary { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; background: transparent; color: #5d6878; font: inherit; text-align: left; cursor: pointer; }
-.process-summary:hover { background: rgba(27,40,59,.025); }
+.process-summary:hover { background: rgba(27,40,59,.03); }
 .kind-icon { color: #7b8797; font-size: 16px; flex-shrink: 0; }
 .process-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .duration { flex-shrink: 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -2182,47 +2214,48 @@ onUnmounted(() => {
 .chevron { flex-shrink: 0; color: #8b95a3; font-size: 12px; transition: transform .18s ease; }.chevron.expanded { transform: rotate(90deg); }
 .process-details { padding: 0 14px 14px 37px; font-size: 13px; color: #626e7f; }
 .process-details h4 { margin: 12px 0 7px; font-size: 12px; font-weight: 550; color: var(--muted); }
-.process-details pre, .json-text { margin: 8px 0 0; padding: 12px; max-height: 320px; overflow: auto; border-radius: var(--radius-control); background: #edf0f4; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 ui-monospace, Consolas, monospace; }
+.process-details pre, .json-text { margin: 8px 0 0; padding: 12px; max-height: 320px; overflow: auto; border-radius: var(--radius-control); background: var(--surface-soft); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 ui-monospace, Consolas, monospace; }
 .tool-facts { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 6px 16px; margin: 0; }
 .tool-facts dt { color: var(--muted); font-size: 12px; }.tool-facts dd { margin: 0; color: #4a5565; font-size: 12px; overflow-wrap: anywhere; }
 .raw-details { margin-top: 12px; }.raw-details summary { font-size: 12px; color: var(--muted); cursor: pointer; }.raw-details summary:hover { color: var(--running); }
 .technical-name { margin: 0; color: var(--muted); font-size: 12px; }
 .quiet { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 12px 0 0; }
-.waiting { display: flex; align-items: center; line-height: 24px; font-size: 12px; color: var(--muted); }.waiting { width: fit-content; max-width: 100%; }
+.waiting { display: flex; align-items: center; gap: 8px; min-height: 34px; width: fit-content; max-width: 100%; line-height: 24px; font-size: 13px; color: var(--muted); }
 .error-card { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 14px 16px; border: 1px solid #ecd8dc; border-radius: var(--radius-card); background: #fff8f9; color: var(--failed); font-size: 13px; }
 .error-card > .el-icon { margin-top: 4px; flex-shrink: 0; font-size: 17px; }.error-card strong { font-weight: 550; }.error-card p { margin: 5px 0 0; color: #85676c; white-space: pre-wrap; }
 .answer-part + .answer-part { margin-top: 22px; }
 .chart-card { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
-.chart-card .card-head { display: flex; align-items: center; gap: 9px; padding: 14px 16px; border-bottom: 1px solid #eff1f4; }
-.chart-card .card-head .kind-icon { display: inline-flex; color: var(--running); }
-.chart-card .card-head .process-title { color: var(--ink); font-size: 14px; font-weight: 550; white-space: normal; overflow-wrap: anywhere; }
-.chart-card .chart-block-body { padding: 16px; }
-.chart-summary { margin: 0 0 16px; font-size: 14px; line-height: 1.8; color: var(--ink); }
+.chart-card .card-head { display: flex; align-items: center; gap: 9px; padding: 12px 12px 4px 16px; }
+.chart-card .card-head .kind-icon { display: inline-flex; color: var(--muted); }
+.chart-card .card-head .process-title { color: var(--ink); font-size: 14px; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.chart-card .chart-block-body { padding: 6px 16px 16px; }
+.chart-summary { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: var(--muted); }
 .chart-table-scroll { overflow: auto; max-width: 100%; max-height: 420px; border: 1px solid var(--line); border-radius: var(--radius-control); }
 .chart-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); }
 .chart-table th, .chart-table td { padding: 11px 14px; text-align: left; border: 0; border-bottom: 1px solid #edf0f3; white-space: nowrap; }
 .chart-table thead th { background: #f5f7f9; color: #566171; font-weight: 600; position: sticky; top: 0; z-index: 1; }
 .chart-table tbody tr:hover { background: #fafbfd; }.chart-table tbody tr:last-child td { border-bottom: 0; }
-:deep(.chart-container) { width: 100%; height: 320px; margin-top: 8px; }
+:deep(.chart-container) { width: 100%; height: 300px; }
 :deep(.chart-container.is-empty) { display: flex; align-items: center; justify-content: center; height: 160px; border: 1px dashed #dce1e8; border-radius: var(--radius-control); background: var(--surface-soft); }
 :deep(.chart-empty) { margin: 0; font-size: 13px; color: var(--muted); }
 .chart-meta { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
-.back-bottom { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); height: 36px; border-color: var(--line); box-shadow: var(--shadow-float); color: #586a83; font-size: 12px; background: var(--surface); z-index: 2; }
-.composer-region { width: min(var(--content-width),100%); flex-shrink: 0; margin: 0 auto; padding: 12px 40px 20px; }
-.composer { padding: 14px 16px 12px; border: 1px solid #dce1e8; border-radius: var(--radius-container); background: var(--surface); box-shadow: 0 3px 14px rgba(27,40,59,.04); }
-.composer:focus-within { border-color: #7fafea; box-shadow: 0 0 0 3px rgba(22,119,255,.07); }
+.back-bottom { position: absolute; bottom: 20px; left: 50%; translate: -50% 0; max-width: calc(100% - 24px); height: 34px; border-color: var(--line); box-shadow: var(--shadow-float); color: #586a83; font-size: 12px; background: var(--surface); z-index: 2; animation: rise .2s ease both; }
+.composer-region { width: min(var(--content-width),100%); flex-shrink: 0; margin: 0 auto; padding: 4px 40px 20px; }
+.composer { padding: 14px 14px 12px 16px; border: 1px solid #dfe3ea; border-radius: var(--radius-container); background: var(--surface); box-shadow: 0 1px 2px rgba(27,40,59,.04), 0 6px 20px rgba(27,40,59,.05); transition: border-color .15s ease, box-shadow .15s ease; }
+.composer:focus-within { border-color: #9dbcf1; box-shadow: 0 0 0 3px rgba(36,102,224,.08), 0 6px 20px rgba(27,40,59,.05); }
 .composer :deep(.el-textarea__inner) { padding: 0 2px; box-shadow: none; background: transparent; line-height: 1.8; font-family: inherit; font-size: 14px; color: var(--ink); }
 .composer :deep(.el-textarea__inner:focus-visible) { outline: 0; }
 .composer :deep(.el-textarea__inner::placeholder) { color: #8c95a2; }
 .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; margin-top: 12px; }
 .composer-toolbar > span { flex: 1; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .composer-toolbar :deep(.el-button) { flex-shrink: 0; height: 34px; min-width: 84px; margin: 0; border-radius: var(--radius-control); font-weight: 550; }
-.composer-toolbar :deep(.send-button) { width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: 50%; }
+.composer-toolbar :deep(.send-button), .composer-toolbar :deep(.stop-button) { width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: 50%; }
 .composer-toolbar :deep(.send-button .el-icon) { font-size: 18px; }
-@media (pointer: coarse) { .composer-toolbar :deep(.send-button) { width: 44px; min-width: 44px; height: 44px; } }
-.composer-toolbar :deep(.el-button.is-disabled) { color: #929ca9; background: #eff2f6; border-color: #e9edf2; }
-.composer-toolbar :deep(.stop-button) { background: #f2f5f9; border-color: #d8e0e9; color: #45566e; }
-.composer-toolbar :deep(.stop-button:hover) { color: var(--running); border-color: #adc9ed; background: var(--blue-soft); }
+.composer-toolbar :deep(.el-button.is-disabled) { color: #a3acb9; background: #eef1f5; border-color: #eef1f5; }
+/* 停止键与发送键同位置、同尺寸，切换时不跳动。 */
+.composer-toolbar :deep(.stop-button) { background: var(--ink); border-color: var(--ink); }
+.stop-glyph { display: block; width: 11px; height: 11px; border-radius: 2.5px; background: #fff; }
+.composer-toolbar :deep(.stop-button:hover) { background: #3a4554; border-color: #3a4554; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :deep(.typewriter) { overflow-wrap: anywhere; }
 :deep(.stream-cursor) { display: inline-block; width: 2px; height: .95em; margin-left: 3px; border-radius: 2px; vertical-align: -.12em; background: #9298a1; pointer-events: none; opacity: .5; }
@@ -2250,27 +2283,6 @@ onUnmounted(() => {
 :deep(button:focus-visible), :deep(summary:focus-visible), :deep(a:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
 :deep(.el-scrollbar__thumb) { background: #a4adba; }
 :deep(.code-block pre), :deep(.table-scroll), .chart-table-scroll, .process-details pre { scrollbar-width: thin; scrollbar-color: #bfc6d0 transparent; }
-@keyframes vds-whole-turn{0%,8%{transform:rotate(-8deg) scale(.88)}25%,34%{transform:rotate(34deg) scale(.92)}51%,58%{transform:rotate(82deg) scale(.78)}76%,84%{transform:rotate(120deg) scale(.91)}100%{transform:rotate(172deg) scale(.88)}}
-@keyframes vds-fold-a{0%,8%,100%{transform:translate(-5px,-5px) rotate(0deg)}25%,34%{transform:translate(0,-7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-6px,-3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-b{0%,8%,100%{transform:translate(5px,-5px) rotate(0deg)}25%,34%{transform:translate(7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,-1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(3px,-6px) rotate(25deg) scaleY(.82)}}
-@keyframes vds-fold-c{0%,8%,100%{transform:translate(5px,5px) rotate(0deg)}25%,34%{transform:translate(0,7px) rotate(45deg) scale(.94)}51%,58%{transform:translate(1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(6px,3px) rotate(25deg) scaleX(.82)}}
-@keyframes vds-fold-d{0%,8%,100%{transform:translate(-5px,5px) rotate(0deg)}25%,34%{transform:translate(-7px,0) rotate(45deg) scale(.94)}51%,58%{transform:translate(-1px,1px) rotate(0deg) scale(1.18)}76%,84%{transform:translate(-3px,6px) rotate(25deg) scaleY(.82)}}
-@media (max-width: 767px) {
-  .agent-page { border-radius: 0; border: 0; }
-  .history-brand { padding: 8px 18px 16px; }.panel-toggle { display: none; }
-  .panel-handle { width: 28px; height: 36px; margin: 10px 0 0 2px; }
-  .message-list { padding: 24px 14px 20px; }.message-row { margin-bottom: 26px; }
-  .message-column, .assistant .message-column { max-width: 100%; width: 100%; }.user .message-column { width: auto; max-width: 94%; }
-  .user .bubble { padding: 10px 14px; }.message-meta { gap: 6px; }
-  .process-summary { gap: 6px; padding: 9px; }.process-title { font-size: 12px; }.process-details { padding: 0 12px 12px; }.duration { font-size: 11px; }
-  .trace-toggle { gap: 7px; }.process-trace.live .trace-toggle, .waiting { gap: 8px; }
-  .timeline { margin-left: 4px; padding-left: 14px; }.timeline-dot { left: -18px; }
-  .chart-card .card-head { padding: 10px 12px; }.chart-card .chart-block-body { padding: 12px; }
-  .composer-region { padding: 8px 12px max(12px,env(safe-area-inset-bottom)); }.composer { padding: 12px; }
-  .composer-toolbar { gap: 8px; }.composer-toolbar > span { font-size: 11px; }
-  .message-actions { gap: 2px; }.message-actions :deep(.el-button) { padding: 6px; }
-}
-@media (max-height: 520px), (max-width: 767px) { .chat-pane--welcome .composer-region { padding-bottom: max(20px,env(safe-area-inset-bottom)); } }
 
 /* 附件与正文分开呈现：发送前可预览/移除，发送后保留文件卡；所有内容以纯文本插值输出。 */
 .attachment-list { display: flex; flex-wrap: wrap; gap: 8px; max-height: 112px; overflow: auto; padding: 0 0 10px; }
@@ -2286,14 +2298,12 @@ onUnmounted(() => {
 .composer-tools { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: 4px 10px; }.composer-tools > span { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .attachment-info { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; flex-shrink: 0; border: 0; border-radius: var(--radius-control); color: #8b95a3; background: transparent; cursor: pointer; }
 .attachment-info .el-icon { font-size: 15px; }
-.attachment-info:hover, .attachment-info:focus-visible { color: var(--blue); background: var(--blue-soft); }
+.attachment-info:hover, .attachment-info:focus-visible { color: var(--ink); background: var(--hover); }
 .attachment-format-hint { max-width: 280px; font-size: 12px; line-height: 1.6; }
-@media (pointer: coarse) { .attachment-info { width: 44px; height: 44px; } }
 .attachment-limits { max-width: 280px; padding: 3px 1px; font-size: 12px; line-height: 1.6; }
 .composer-tools :deep(.el-button) { min-width: 0; padding: 7px 9px; color: #63758e; }.attachment-count { margin-left: 6px; font-size: 11px; color: var(--muted); }
 .attachment-content { max-height: 58vh; overflow: auto; margin: 0; padding: 16px; background: var(--surface-soft); border-radius: var(--radius-control); color: var(--ink); font: 12px/1.75 ui-monospace,Consolas,monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .attachment-drop { position: absolute; z-index: 20; inset: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; border: 2px dashed #93b5e8; border-radius: var(--radius-container); background: #f3f7fff5; color: #4779bd; text-align: center; pointer-events: none; }.attachment-drop .el-icon { font-size: 32px; }.attachment-drop span { font-size: 12px; }
-@media (max-width: 767px) { .composer-tools { gap: 4px; }.composer-tools .next-draft { display: none; }.attachment-preview > span { max-width: 150px; } }
 
 
 /* 会话级导航与正文操作保持轻量。 */
@@ -2303,22 +2313,22 @@ onUnmounted(() => {
 .conversation-title > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }.conversation-title .el-icon { flex-shrink: 0; color: #a2aab6; font-size: 13px; }
 .conversation-controls { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .utility-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 30px; height: 30px; padding: 5px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-.utility-button .el-icon { font-size: 16px; }.utility-button:hover { color: var(--running); background: var(--hover); }.utility-button.starred { color: #af8535; }
+.utility-button .el-icon { font-size: 16px; }.utility-button:hover { color: var(--ink); background: var(--hover); }.utility-button.starred { color: #af8535; }
 .conversation-outline { position: absolute; z-index: 8; top: 56px; right: 20px; width: min(360px, calc(100% - 32px)); max-height: min(420px, 60%); overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-container); background: #fff; box-shadow: 0 12px 40px #2636521a; }
 .outline-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 8px 8px; color: var(--muted); font-size: 12px; }
 .outline-entry { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 8px; border: 0; border-radius: var(--radius-control); background: transparent; font: inherit; text-align: left; cursor: pointer; }.outline-entry:hover { background: var(--hover); }.outline-entry > span { color: #9aa5b5; font-size: 11px; font-variant-numeric: tabular-nums; }.outline-entry strong { flex: 1; min-width: 0; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }.outline-entry .el-icon { font-size: 12px; color: #a0aabb; }
 .message-row { scroll-margin-top: 18px; border-radius: var(--radius-control); }.message-row.located { outline: 2px solid #b9d1f2; outline-offset: 8px; }.message-row:focus { outline-offset: 8px; }
 .bottom-generating { color: var(--running); }
-@media (max-width: 767px) { .conversation-bar { gap: 8px; padding: 8px 12px; min-height: 52px; }.conversation-title > span { font-size: 13px; }.conversation-controls { gap: 2px; }.conversation-outline { top: 52px; right: 12px; }.composer-tools { gap: 2px; }.composer-tools .next-draft { display: none; } }
 
-.question-actions { display: flex; justify-content: flex-end; margin-top: 3px; }
+/* 提问的时间与编辑入口平时隐去，指向或键盘聚焦该条消息时浮现。 */
+.question-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 3px; opacity: 0; transition: opacity .15s ease; }
+.message-row:hover .question-actions, .message-row:focus-within .question-actions { opacity: 1; }
 .question-actions .utility-button { color: #8c95a2; }
 .utility-button:disabled { opacity: .4; cursor: not-allowed; }
 .feedback-button.selected { color: var(--running); background: var(--blue-soft); }
 :deep(.feedback-down) { transform: rotate(180deg); }
 .composer-editing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .composer-editing > span { display: inline-flex; align-items: center; gap: 7px; }
-@media (pointer: coarse) { .question-actions .utility-button, .message-actions .utility-button { min-width: 44px; height: 44px; }.panel-handle { width: 44px; height: 44px; } }
 
 /* 减少动态仍隐藏文字光标、禁用其他动画；按用户明确选择保留生成状态标识。 */
 @media (prefers-reduced-motion: reduce) {
@@ -2326,10 +2336,10 @@ onUnmounted(() => {
   :deep(.stream-cursor) { display: none !important; }
   /* 减少动态时仅保留低幅明暗，避免扩散缩放。 */
   .timeline-dot.is-live::after { transform: none; animation: timeline-ring-soft 1.8s ease-in-out infinite !important; }
-  :deep(.activity-mark .activity-form) { display: block; animation: vds-whole-turn 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-a) { animation: vds-fold-a 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-b) { animation: vds-fold-b 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-c) { animation: vds-fold-c 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
-  :deep(.activity-mark .activity-fold-d) { animation: vds-fold-d 5.6s cubic-bezier(.5,0,.25,1) infinite !important; }
+  :deep(.activity-mark .activity-tile-a) { animation: tile-a 3.6s cubic-bezier(.6,0,.2,1) infinite !important; }
+  :deep(.activity-mark .activity-tile-b) { animation: tile-b 3.6s cubic-bezier(.6,0,.2,1) infinite !important; }
+  :deep(.activity-mark .activity-tile-c) { animation: tile-c 3.6s cubic-bezier(.6,0,.2,1) infinite !important; }
+  :deep(.activity-mark .activity-tile-d) { animation: tile-d 3.6s cubic-bezier(.6,0,.2,1) infinite !important; }
+  .live-step { animation: text-sweep 2.4s linear infinite !important; }
 }
 </style>
