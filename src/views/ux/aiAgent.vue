@@ -2342,7 +2342,6 @@ onUnmounted(() => {
   --radius-sm: 6px; --radius: 10px; --radius-lg: 14px;
   --shadow-xs: 0 1px 2px rgba(23,32,56,.05); --shadow-sm: 0 1px 2px rgba(23,32,56,.04), 0 2px 8px rgba(23,32,56,.05);
   --shadow-md: 0 4px 16px rgba(23,32,56,.08); --shadow-lg: 0 12px 32px rgba(23,32,56,.14);
-  --focus-ring: 0 0 0 3px rgba(51,112,255,.14);
   --content-width: 800px;
   --el-color-primary: #3370ff;
   --el-font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -2371,13 +2370,13 @@ button { font: inherit; }
 :deep(.brand-mark i:nth-child(3)) { opacity: .8; }
 .new-chat { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); font-size: 13.5px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .new-chat .el-icon { font-size: 15px; }
-.new-chat:hover { border-color: var(--blue-line); color: var(--blue); }
-.history-search { margin-top: 10px; }
-.history-search :deep(.el-input__wrapper) { height: 34px; padding: 0 10px; border-radius: 8px; background: rgba(23,32,56,.04); box-shadow: none; transition: background .15s, box-shadow .15s; }
-.history-search :deep(.el-input__wrapper:hover) { background: var(--hover); }
-.history-search :deep(.el-input__wrapper.is-focus) { background: #fff; box-shadow: 0 0 0 1px var(--blue) inset, var(--focus-ring); }
+.new-chat:hover { border-color: var(--disabled); background: var(--fill-soft); }
+.history-search { margin-top: 8px; }
+.history-search :deep(.el-input__wrapper) { height: 36px; padding: 0 10px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .15s; }
+.history-search :deep(.el-input__wrapper:hover) { box-shadow: 0 0 0 1px var(--disabled) inset; }
+.history-search :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px var(--faint) inset; }
 .history-search :deep(.el-input__inner) { font-size: 13px; }
-.history-search kbd { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; background: #fff; font: 10.5px/1 var(--el-font-family); color: var(--faint); }
+.history-search kbd { font: 11px/1 var(--el-font-family); color: var(--disabled); }
 .history-scroll { flex: 1; min-height: 0; margin-top: 6px; }
 .history-empty { margin: 32px 0; text-align: center; font-size: 12.5px; color: var(--faint); }
 .history-group h2 { margin: 0; padding: 16px 10px 6px; font-size: 11.5px; font-weight: 500; letter-spacing: .4px; color: var(--faint); }
@@ -2423,7 +2422,7 @@ button { font: inherit; }
 /* 编辑按钮在气泡左侧悬停出现，不占版面高度，问与答之间保持固定间距。 */
 .message.user { display: flex; justify-content: flex-end; align-items: flex-end; gap: 4px; }
 .question-actions { order: -1; display: flex; margin-bottom: 6px; opacity: 0; transition: opacity .15s; }
-.question { max-width: 78%; padding: 10px 16px; border-radius: 16px 16px 4px 16px; background: var(--blue-soft); color: var(--ink); }
+.question { max-width: 78%; padding: 10px 16px; border-radius: 16px 16px 4px 16px; background: var(--fill); color: var(--ink); }
 .question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.75; }
 .sent-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .message.user:hover .question-actions, .question-actions:focus-within { opacity: 1; }
@@ -2558,7 +2557,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* ---------- 输入区 ---------- */
 .composer-region { flex-shrink: 0; width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 4px 40px 0; }
 .composer { padding: 12px 12px 10px 16px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow-sm); transition: border-color .15s, box-shadow .15s; }
-.composer:focus-within { border-color: var(--blue-line); box-shadow: var(--focus-ring), var(--shadow-sm); }
+.composer:focus-within { border-color: var(--faint); }
 .composer :deep(.el-textarea__inner) { padding: 2px 0; border: 0; box-shadow: none; background: transparent; color: var(--ink); font-family: inherit; font-size: 14.5px; line-height: 1.7; }
 .composer :deep(.el-textarea__inner::placeholder) { color: var(--faint); }
 .composer-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
@@ -2625,7 +2624,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
 .is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: var(--shadow-md); }
-.is-welcome .composer:focus-within { box-shadow: var(--focus-ring), var(--shadow-md); }
+.is-welcome .composer:focus-within { box-shadow: var(--shadow-md); }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
 .examples { display: grid; gap: 8px; margin-top: 18px; }
 .examples-label { margin: 0; padding: 0 4px 2px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
@@ -2641,6 +2640,8 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :deep(.typewriter) { overflow-wrap: anywhere; }
 :deep(.stream-cursor) { display: inline-block; width: 2px; height: .95em; margin-left: 2px; border-radius: 1px; vertical-align: -.12em; background: var(--blue); opacity: .7; pointer-events: none; }
+/* 思考等过程文本不显示输入光标，只有正文答复在生成时显示。 */
+.step-detail :deep(.stream-cursor) { display: none; }
 :deep(.markdown-body p) { margin: 0 0 12px; }
 :deep(.markdown-body p:last-child) { margin-bottom: 0; }
 :deep(.markdown-body > :first-child) { margin-top: 0; }
