@@ -124,10 +124,10 @@
                           <el-icon v-if="stepExpandable(item)" class="step-chevron"><ChevronIcon /></el-icon>
                         </component>
                         <div v-if="stepExpandable(item) && stepOpen(message, item)" class="step-detail">
-                          <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
+                          <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message) && item.status === 'running'" @progress="scheduleScroll" />
                           <template v-else-if="item.kind === 'subagent'">
                             <template v-if="item.thinking"><h4>{{ t('AIAGENT.PROCESS.THINKING_TURN') }}</h4><p class="plain">{{ item.thinking }}</p></template>
-                            <template v-if="item.answer"><h4>{{ t('AIAGENT.PROCESS.SUBAGENT_ANSWER') }}</h4><Typewriter :content="item.answer" :active="isActive(message) && item.status === 'running'" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" /></template>
+                            <template v-if="item.answer"><h4>{{ t('AIAGENT.PROCESS.SUBAGENT_ANSWER') }}</h4><Typewriter :content="item.answer" :active="isActive(message) && item.status === 'running'" @progress="scheduleScroll" /></template>
                             <p v-if="!item.thinking && !item.answer" class="plain">{{ t('AIAGENT.STATUS.WAITING') }}</p>
                           </template>
                           <pre v-else-if="item.kind === 'json'" class="raw">{{ item.input }}</pre>
@@ -142,7 +142,7 @@
                   </div>
 
                   <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
-                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :highlight="item.id === keyMarkPart(message)" :sweep="justFinished(message)" :cursor="cursorOwner(message) === item.id" @progress="scheduleScroll" />
+                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :highlight="item.id === keyMarkPart(message)" :sweep="justFinished(message)" @progress="scheduleScroll" />
                     <div v-else-if="item.kind === 'chart'" class="result-card">
                       <div class="result-head">
                         <strong>{{ item.chart?.title || t('AIAGENT.CHART.TITLE') }}</strong>
@@ -1469,11 +1469,6 @@ function liveLabel(message: ChatMessage) {
   if (message.process.some(p => p.kind === 'chart')) return t('AIAGENT.STATUS.RENDERING');
   return message.process.length ? t('AIAGENT.STATUS.THINKING') : t('AIAGENT.STATUS.WAITING');
 }
-// 展示层：只允许最新过程项拥有光标；图表/工具在末尾时不回跳到旧文字。
-function cursorOwner(message: ChatMessage) {
-  const item = message.process[message.process.length - 1];
-  return isActive(message) && item?.status === 'running' && (item.kind === 'text' || item.kind === 'subagent') ? item.id : undefined;
-}
 function answerText(message: ChatMessage) {
   // 用户评审修正：中断后仍可复制已收到的文字，不把过程文本冒充已完成的最终答复。
   if (message.status === 'stopped' || message.status === 'error') {
@@ -2152,7 +2147,7 @@ function highlightCode(code: string, language: string): string {
   return html + escapeHtml(code.slice(last));
 }
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>';
-function renderMarkdown(source: string, depth = 0, cursor = false): string {
+function renderMarkdown(source: string, depth = 0): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const result: string[] = [];
   const cells = (line: string) => {
@@ -2214,12 +2209,6 @@ function renderMarkdown(source: string, depth = 0, cursor = false): string {
     result.push(/^>\s?/.test(line) ? `<blockquote>${inlineMarkdown(line.replace(/^>\s?/, ''))}</blockquote>` : `<p>${inlineMarkdown(line)}</p>`);
     i++;
   }
-  // 只在最后一个普通文本块的闭合标签前插入装饰光标；不触碰代码、表格或 details。
-  // 使用已转义的 HTML，不解析原始输入，不在链接/行内代码中嵌入光标。
-  if (cursor && result.length) {
-    const last = result.length - 1;
-    result[last] = result[last].replace(/(<\/(?:p|h[1-6]|blockquote|li)>)(<\/(?:ul|ol)>)?$/, '<span class="stream-cursor" aria-hidden="true"></span>$1$2');
-  }
   return result.join('');
 }
 // 逐次取最多 15 个 Unicode 字符，完整 details 作为一个原子块；不切割生成的 HTML。
@@ -2245,7 +2234,7 @@ function keyMarkPart(message: ChatMessage) {
   return layout(message).body.find(item => item.kind === 'text' && /\*\*[^*\n]+\*\*/.test(item.text))?.id;
 }
 const Typewriter = defineComponent({
-  props: { content: { type: String, required: true }, active: Boolean, highlight: Boolean, sweep: Boolean, cursor: { type: Boolean, default: true } }, emits: ['progress'],
+  props: { content: { type: String, required: true }, active: Boolean, highlight: Boolean, sweep: Boolean }, emits: ['progress'],
   setup(props, { emit }) {
     const displayed = ref(''); let observed = '', pending = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -2267,7 +2256,7 @@ const Typewriter = defineComponent({
       observed = content; emit('progress');
     }, { immediate: true });
     onUnmounted(clear);
-    const html = computed(() => renderMarkdown(displayed.value, 0, props.active && props.cursor && !reducedMotion.value));
+    const html = computed(() => renderMarkdown(displayed.value));
     const root = ref<HTMLElement>(); let openStates: boolean[] = [];
     const captureDetails = () => { openStates = Array.from(root.value?.querySelectorAll('details') || []).map(el => el.open); };
     const restoreDetails = () => { root.value?.querySelectorAll('details').forEach((el, i) => { if (i < openStates.length) el.open = openStates[i]; }); };
@@ -2281,9 +2270,44 @@ const Typewriter = defineComponent({
       el.classList.add('key-mark');
       if (props.sweep && !reducedMotion.value) { el.classList.add('mark-sweep'); el.style.animationDelay = `${mountedAt - performance.now() + 280}ms`; }
     };
-    const updated = () => { restoreDetails(); paintMarks(); };
+    // 浮现式输出：不显示输入光标，新出现的文字在约半秒内淡入。
+    // innerHTML 每次更新都会重建节点，因此记录每段文字出现的时刻，重建后按已播放时长（负的 animation-delay）接续，不会重播。
+    const FADE_MS = 480, NO_WRAP = /^(?:UL|OL|TABLE|THEAD|TBODY|TR)$/;
+    let reveals: { from: number; at: number }[] = [], shownLength = 0, fadedHtml = '';
+    const fadeIn = () => {
+      const el = root.value;
+      if (!el || fadedHtml === html.value) return;
+      fadedHtml = html.value;
+      const nodes: Text[] = [], walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let total = 0;
+      while (walker.nextNode()) { const node = walker.currentNode as Text; nodes.push(node); total += node.data.length; }
+      const now = performance.now();
+      if (props.active && !reducedMotion.value && total > shownLength) reveals.push({ from: shownLength, at: now });
+      shownLength = total;
+      reveals = reveals.filter(item => now - item.at < FADE_MS && item.from < total);
+      if (!reveals.length) return;
+      let offset = 0;
+      for (const node of nodes) {
+        const start = offset, end = offset + node.data.length; offset = end;
+        if (end <= reveals[0].from || NO_WRAP.test(node.parentElement?.tagName ?? '')) continue;
+        let rest = node, restStart = start;
+        for (let k = 0; k < reveals.length; k++) {
+          const from = Math.max(reveals[k].from, start), to = Math.min(k + 1 < reveals.length ? reveals[k + 1].from : total, end);
+          if (from >= to) continue;
+          if (from > restStart) { rest = rest.splitText(from - restStart); restStart = from; }
+          const after = to < end ? rest.splitText(to - restStart) : null;
+          const span = document.createElement('span');
+          span.className = 'fade-in-text'; span.style.animationDelay = `${Math.round(reveals[k].at - now)}ms`;
+          rest.replaceWith(span); span.appendChild(rest);
+          if (!after) break;
+          rest = after; restStart = to;
+        }
+      }
+    };
+    const mounted = () => { paintMarks(); fadeIn(); };
+    const updated = () => { restoreDetails(); paintMarks(); fadeIn(); };
     return () => h('div', { class: ['typewriter', { active: props.active }] }, [
-      h('div', { ref: root, class: 'markdown-body', innerHTML: html.value, onClick: copyCode, onToggleCapture: scheduleScroll, onVnodeBeforeUpdate: captureDetails, onVnodeMounted: paintMarks, onVnodeUpdated: updated }),
+      h('div', { ref: root, class: 'markdown-body', innerHTML: html.value, onClick: copyCode, onToggleCapture: scheduleScroll, onVnodeBeforeUpdate: captureDetails, onVnodeMounted: mounted, onVnodeUpdated: updated }),
     ]);
   },
 });
@@ -2556,8 +2580,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 
 /* ---------- 输入区 ---------- */
 .composer-region { flex-shrink: 0; width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 4px 40px 0; }
-.composer { padding: 12px 12px 10px 16px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow-sm); transition: border-color .15s, box-shadow .15s; }
-.composer:focus-within { border-color: var(--faint); }
+.composer { padding: 14px 14px 12px 18px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow-md); transition: border-color .15s; }
+/* 起始页与问答页共用同一套输入框外观；聚焦时只略微加深描边，不使用主题色。 */
+.composer:focus-within { border-color: var(--disabled); }
 .composer :deep(.el-textarea__inner) { padding: 2px 0; border: 0; box-shadow: none; background: transparent; color: var(--ink); font-family: inherit; font-size: 14.5px; line-height: 1.7; }
 .composer :deep(.el-textarea__inner::placeholder) { color: var(--faint); }
 .composer-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
@@ -2623,8 +2648,6 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .welcome-title { margin: 24px 0 0; font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .5px; color: var(--ink); }
 .welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
-.is-welcome .composer { padding: 16px 14px 12px 18px; box-shadow: var(--shadow-md); }
-.is-welcome .composer:focus-within { box-shadow: var(--shadow-md); }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
 .examples { display: grid; gap: 8px; margin-top: 18px; }
 .examples-label { margin: 0; padding: 0 4px 2px; font-size: 12px; color: var(--faint); animation: rise .45s ease-out .1s both; }
@@ -2639,9 +2662,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* ---------- Markdown ---------- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :deep(.typewriter) { overflow-wrap: anywhere; }
-:deep(.stream-cursor) { display: inline-block; width: 2px; height: .95em; margin-left: 2px; border-radius: 1px; vertical-align: -.12em; background: var(--blue); opacity: .7; pointer-events: none; }
-/* 思考等过程文本不显示输入光标，只有正文答复在生成时显示。 */
-.step-detail :deep(.stream-cursor) { display: none; }
+:deep(.fade-in-text) { animation: text-in .48s ease-out both; }
 :deep(.markdown-body p) { margin: 0 0 12px; }
 :deep(.markdown-body p:last-child) { margin-bottom: 0; }
 :deep(.markdown-body > :first-child) { margin-top: 0; }
@@ -2685,16 +2706,16 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* 动画 */
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes vds-layer-a{0%{transform:rotate(0deg) scale(1.1)}50%{transform:rotate(180deg) scale(.86)}100%{transform:rotate(360deg) scale(1.1)}}
 @keyframes vds-layer-b{0%{transform:rotate(45deg) scale(.9)}50%{transform:rotate(-45deg) scale(1.12)}100%{transform:rotate(-135deg) scale(.9)}}
 @keyframes vds-layer-c{0%,100%{transform:rotate(0deg) scale(1);border-radius:3px}25%{transform:rotate(-90deg) scale(.7);border-radius:50%}50%{transform:rotate(-180deg) scale(1);border-radius:3px}75%{transform:rotate(-270deg) scale(.7);border-radius:50%}}
 @keyframes mark-in{from{opacity:0;transform:scale(.4) rotate(-45deg)}to{opacity:1;transform:none}}
 
-/* 减少动态：关闭其余动效与文字光标；按用户要求保留生成状态标识动画。 */
+/* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  :deep(.stream-cursor) { display: none !important; }
   :deep(.activity-mark .activity-layer-a) { animation: vds-layer-a 6s cubic-bezier(.45,0,.55,1) infinite !important; }
   :deep(.activity-mark .activity-layer-b) { animation: vds-layer-b 3s cubic-bezier(.45,0,.55,1) infinite !important; }
   :deep(.activity-mark .activity-layer-c) { animation: vds-layer-c 6s cubic-bezier(.45,0,.55,1) infinite !important; }
