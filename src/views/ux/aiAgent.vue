@@ -337,7 +337,7 @@ const BrandMark = defineComponent({
   ])]),
 });
 // 生成中状态标识：一次完整的“呼吸”——吸气时圆点缓缓涨大，稍作停顿；呼气时圆点收回，同时一圈细环从边缘荡开、淡去。
-// 吸短呼长，一个周期约 3.6 秒。用比主题蓝更浅的蓝，显得轻。配合状态文字上的一道微光。不由 token 更新驱动。
+// 吸短呼长，一个周期约 3.6 秒。颜色为主题蓝实心。配合状态文字上的一道微光。不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
   setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i', { class: 'activity-ring' }), h('i', { class: 'activity-core' })]),
@@ -2524,11 +2524,11 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：圆点吸气涨大、呼气收回并荡开一圈细环；用浅蓝，不用深色 */
+/* 生成中标识：圆点吸气涨大、呼气收回并荡开一圈细环；主题蓝实心 */
 :deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
 :deep(.activity-mark i) { position: absolute; border-radius: 50%; }
-:deep(.activity-core) { inset: 5px; background: radial-gradient(circle at 35% 30%, #a9c5ff, #6f9bff 70%); animation: vds-breathe 3.6s infinite both; }
-:deep(.activity-ring) { inset: 0; border: 1.2px solid #8db0ff; animation: vds-ring 3.6s infinite both; }
+:deep(.activity-core) { inset: 5px; background: var(--blue); animation: vds-breathe 3.6s infinite both; }
+:deep(.activity-ring) { inset: 0; border: 1.2px solid var(--blue); animation: vds-ring 3.6s infinite both; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
