@@ -8,11 +8,15 @@
           <h1 :title="t('AIAGENT.BRAND')">{{ t('AIAGENT.BRAND') }}</h1>
           <el-tooltip :content="uiCopy.collapse" placement="bottom"><button class="icon-button" type="button" :aria-label="uiCopy.collapse" :aria-expanded="true" @click="toggleSidebar"><el-icon><PanelIcon /></el-icon></button></el-tooltip>
         </div>
-        <button class="new-chat" type="button" @click="newConversation"><el-icon><NewChatIcon /></el-icon><span>{{ t('AIAGENT.HISTORY.NEW') }}</span></button>
-        <div class="history-search">
-          <el-input ref="historySearchRef" v-model="historyQuery" clearable :prefix-icon="Search" :placeholder="uiCopy.searchHistory" :aria-label="`${t('AIAGENT.HISTORY.TITLE')} · ${t('CM.COMMON.SEARCH')}`" @keydown.esc.stop="historyQuery = ''">
-            <template v-if="!historyQuery" #suffix><kbd>Ctrl K</kbd></template>
-          </el-input>
+        <!-- 侧栏导航为无边框列表行；点击“搜索会话”后整块切换为搜索视图，返回或 Esc 退出。 -->
+        <nav v-if="!searchMode" class="side-nav">
+          <button class="side-row new-chat" :class="{ current: !messages.length }" type="button" @click="newConversation"><el-icon><NewChatIcon /></el-icon><span>{{ t('AIAGENT.HISTORY.NEW') }}</span></button>
+          <button class="side-row" type="button" @click="focusHistorySearch"><el-icon><Search /></el-icon><span>{{ uiCopy.searchHistory }}</span><kbd>Ctrl K</kbd></button>
+        </nav>
+        <div v-else class="history-search">
+          <button class="search-back" type="button" :aria-label="uiCopy.back" :title="uiCopy.back" @click="closeSearch"><el-icon><BackIcon /></el-icon></button>
+          <input ref="historySearchRef" v-model="historyQuery" type="text" :placeholder="uiCopy.searchHistory" :aria-label="`${t('AIAGENT.HISTORY.TITLE')} · ${t('CM.COMMON.SEARCH')}`" @keydown.esc.stop.prevent="closeSearch" />
+          <button v-if="historyQuery" class="search-clear" type="button" :aria-label="t('CM.COMMON.CLOSE')" @click="historyQuery = ''; historySearchRef?.focus()"><el-icon><Close /></el-icon></button>
         </div>
         <el-scrollbar class="history-scroll">
           <p v-if="!filteredHistory.length" class="history-empty">{{ t(historyQuery.trim() ? 'CM.UX.HOME.SEARCH.RESULT.EMPTY' : 'AIAGENT.HISTORY.EMPTY') }}</p>
@@ -321,16 +325,17 @@ const ChartLineIcon = lineIcon(['M3 3v16a2 2 0 0 0 2 2h16', 'm19 9-5 5-4-4-3 3']
 const TableIcon = lineIcon(['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M3 9h18', 'M9 9v12']);
 const MoreIcon = lineIcon(['M12 12h.01', 'M19 12h.01', 'M5 12h.01'], 2.4);
 const ChevronIcon = lineIcon(['m6 9 6 6 6-6']);
+const BackIcon = lineIcon(['M19 12H5', 'm12 19-7-7 7-7']);
 const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 // 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
 const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 生成中状态标识：三个小圆点依次明暗起伏，克制、通用；不由 token 更新驱动。
+// 生成中状态标识：品牌四方块的缩小版，四格按顺时针依次点亮；配合状态文字上的一道微光。不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
-  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i')]),
+  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -987,7 +992,9 @@ const draft = computed({ get: () => current.value.draft, set: value => { current
 // 「本会话是否有回答在生成」——并发后按当前会话判定，不再用全局单值。
 
 // 会话定位和快捷键仅改变本地展示。
-const historySearchRef = ref<InputInstance>();
+const historySearchRef = ref<HTMLInputElement>();
+const searchMode = ref(false);
+function closeSearch() { searchMode.value = false; historyQuery.value = ''; }
 const locatedMessageId = ref(''), copiedMessageId = ref('');
 let locatedTimer: ReturnType<typeof setTimeout> | undefined, copiedTimer: ReturnType<typeof setTimeout> | undefined;
 const questionEntries = computed(() => messages.value.filter(message => message.role === 'user'));
@@ -1016,7 +1023,7 @@ async function openHistoryResult(chat: Conversation) {
   if (match) { if (match.role === 'assistant') traceOverride.set(match.id, true); await jumpToMessage(match.id); }
 }
 async function focusHistorySearch() {
-  sidebarOpen.value = true;
+  sidebarOpen.value = true; searchMode.value = true;
   await nextTick(); historySearchRef.value?.focus();
 }
 // 点击发送会卸载原按钮并把焦点交回 body；只在此时补快捷键，不重复处理组件内事件。
@@ -1090,13 +1097,13 @@ const welcomeExamples = ['ONE', 'TWO', 'THREE'];
 // ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
 // 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
 const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
-  tryAsking: '试试这样问', fill: '填入', copy: '复制', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
+  tryAsking: '试试这样问', fill: '填入', copy: '复制', back: '返回', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
   searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
   done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
   questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
   steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
 } : {
-  tryAsking: 'Try asking', fill: 'Use', copy: 'Copy', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
+  tryAsking: 'Try asking', fill: 'Use', copy: 'Copy', back: 'Back', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
   searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
   done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
   questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
@@ -1328,7 +1335,7 @@ function finishText(message: ChatMessage) {
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
 function newConversation() {
   rememberReadingPosition();
-  historyQuery.value = '';
+  historyQuery.value = ''; searchMode.value = false;
   // 不再打断正在跑的回答：并发下其它会话的请求独立存活，切回来还能继续看。
   conversations.value = conversations.value.filter(c => c.messages.length || c.title || c.draft || c.attachments?.length);
   const chat = makeConversation(); conversations.value.unshift(chat); activeId.value = chat.id;
@@ -2391,22 +2398,25 @@ button { font: inherit; }
 .icon-button.selected { color: var(--blue); background: var(--blue-soft); }
 
 /* ---------- 侧栏 ---------- */
-.sidebar { width: 264px; flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 14px 12px 10px; background: var(--fill-soft); border-right: 1px solid var(--line-soft); }
+.sidebar { width: 264px; flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 14px 12px 10px; background: var(--fill-soft); }
 .brand { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 2px 0 6px; }
 .brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 :deep(.brand-mark) { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; flex-shrink: 0; width: 24px; height: 24px; padding: 5px; border-radius: 6px; background: var(--blue); }
 :deep(.brand-mark i) { border-radius: 1.5px; background: #fff; }
 :deep(.brand-mark i:nth-child(2)) { opacity: .62; }
 :deep(.brand-mark i:nth-child(3)) { opacity: .8; }
-.new-chat { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); font-size: 13.5px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
-.new-chat .el-icon { font-size: 15px; }
-.new-chat:hover { border-color: var(--disabled); background: var(--fill-soft); }
-.history-search { margin-top: 8px; }
-.history-search :deep(.el-input__wrapper) { height: 36px; padding: 0 10px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .15s; }
-.history-search :deep(.el-input__wrapper:hover) { box-shadow: 0 0 0 1px var(--disabled) inset; }
-.history-search :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px var(--faint) inset; }
-.history-search :deep(.el-input__inner) { font-size: 13px; }
-.history-search kbd { font: 11px/1 var(--el-font-family); color: var(--disabled); }
+.side-nav { display: grid; gap: 2px; margin-top: 12px; }
+.side-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 13.5px; text-align: left; cursor: pointer; transition: background .12s; }
+.side-row .el-icon { flex-shrink: 0; font-size: 16px; color: var(--muted); }
+.side-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-row kbd { font: 11px/1 var(--el-font-family); color: var(--disabled); }
+.side-row:hover, .side-row.current { background: var(--hover); }
+.history-search { display: flex; align-items: center; gap: 2px; height: 40px; margin-top: 12px; padding: 0 6px; border-radius: 20px; background: var(--hover); }
+.history-search input { flex: 1; min-width: 0; height: 100%; padding: 0 4px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; }
+.history-search input::placeholder { color: var(--faint); }
+.search-back, .search-clear { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; transition: background .12s, color .12s; }
+.search-clear { font-size: 13px; }
+.search-back:hover, .search-clear:hover { background: rgba(23,32,56,.08); color: var(--ink); }
 .history-scroll { flex: 1; min-height: 0; margin-top: 6px; }
 .history-empty { margin: 32px 0; text-align: center; font-size: 12.5px; color: var(--faint); }
 .history-group h2 { margin: 0; padding: 16px 10px 6px; font-size: 11.5px; font-weight: 500; letter-spacing: .4px; color: var(--faint); }
@@ -2463,7 +2473,7 @@ button { font: inherit; }
 .trace-toggle { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 32px; padding: 0 10px 0 8px; margin-left: -8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: background .15s; }
 .trace-toggle:hover { background: var(--fill-soft); }
 .trace-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.process.live .trace-label { color: var(--ink); }
+.process.live .trace-label { background: linear-gradient(90deg, var(--ink) 0%, var(--ink) 38%, #a9b1c0 50%, var(--ink) 62%, var(--ink) 100%) 0 0 / 260% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: vds-shimmer 2.4s linear infinite; }
 .trace-elapsed { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--faint); }
 .trace-icon { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; }
 .trace-result { flex-shrink: 0; font-size: 15px; color: var(--success); }
@@ -2509,11 +2519,12 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：三个圆点依次明暗起伏 */
-:deep(.activity-mark) { display: flex; align-items: center; justify-content: center; gap: 3px; width: 20px; height: 20px; flex: 0 0 20px; }
-:deep(.activity-mark i) { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); animation: vds-dot 1.2s ease-in-out infinite both; }
-:deep(.activity-mark i:nth-child(2)) { animation-delay: .16s; }
-:deep(.activity-mark i:nth-child(3)) { animation-delay: .32s; }
+/* 生成中标识：品牌四方块缩小版，四格顺时针依次点亮 */
+:deep(.activity-mark) { display: grid; grid-template-columns: 5px 5px; grid-template-rows: 5px 5px; gap: 2px; place-content: center; width: 20px; height: 20px; flex: 0 0 20px; }
+:deep(.activity-mark i) { border-radius: 1.5px; background: var(--blue); animation: vds-tile 1.6s ease-in-out infinite both; }
+:deep(.activity-mark i:nth-child(2)) { animation-delay: .2s; }
+:deep(.activity-mark i:nth-child(4)) { animation-delay: .4s; }
+:deep(.activity-mark i:nth-child(3)) { animation-delay: .6s; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2715,14 +2726,16 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-dot { 0%, 70%, 100% { opacity: .28; transform: scale(.85); } 35% { opacity: 1; transform: scale(1.1); } }
+@keyframes vds-tile { 0%, 55%, 100% { opacity: .2; } 20% { opacity: 1; } }
+@keyframes vds-shimmer { from { background-position: 100% 0; } to { background-position: -60% 0; } }
 
 /* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  :deep(.activity-mark i) { animation: vds-dot 1.2s ease-in-out infinite both !important; }
-  :deep(.activity-mark i:nth-child(2)) { animation-delay: .16s !important; }
-  :deep(.activity-mark i:nth-child(3)) { animation-delay: .32s !important; }
+  :deep(.activity-mark i) { animation: vds-tile 1.6s ease-in-out infinite both !important; }
+  :deep(.activity-mark i:nth-child(2)) { animation-delay: .2s !important; }
+  :deep(.activity-mark i:nth-child(4)) { animation-delay: .4s !important; }
+  :deep(.activity-mark i:nth-child(3)) { animation-delay: .6s !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
