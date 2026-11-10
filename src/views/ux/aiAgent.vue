@@ -20,7 +20,7 @@
             <h2>{{ group.label }}</h2>
             <div v-for="chat in group.items" :key="chat.id" class="history-item" :class="{ selected: chat.id === activeId, renaming: renaming.id === chat.id && renaming.where === 'side' }">
               <input v-if="renaming.id === chat.id && renaming.where === 'side'" v-model="renaming.value" class="rename-input" maxlength="80" :aria-label="t('AIAGENT.HISTORY.NAME_LABEL')" @keydown.enter.prevent="commitRename" @keydown.esc.stop.prevent="cancelRename" @blur="commitRename" />
-              <button v-else class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')" @click="openHistoryResult(chat)">
+              <button v-else class="history-select" type="button" :aria-current="chat.id === activeId ? 'page' : undefined" :title="chat.title || t('AIAGENT.HISTORY.UNTITLED')" @click="openHistoryResult(chat)" @dblclick="renameConversation(chat, 'side')">
                 <span class="history-title">{{ chat.title || t('AIAGENT.HISTORY.UNTITLED') }}</span>
                 <span v-if="historyQuery.trim()" class="history-match">{{ historyMatch(chat) }}</span>
                 <i v-if="['running', 'failed', 'stopped'].includes(chatState(chat))" class="history-dot" :class="chatState(chat)" :title="t(chatStateKeys[chatState(chat)])" aria-hidden="true" />
@@ -86,6 +86,7 @@
                     </div>
                   </div>
                   <div class="question-actions">
+                    <el-tooltip :content="copiedMessageId === message.id ? t('AIAGENT.COPY.SUCCESS') : uiCopy.copy"><button type="button" class="icon-button small" :aria-label="uiCopy.copy" @click="copyQuestion(message)"><el-icon><component :is="copiedMessageId === message.id ? Check : CopyDocument" /></el-icon></button></el-tooltip>
                     <el-tooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')"><button type="button" class="icon-button small" :disabled="streaming || attachmentReading" :aria-label="t('AIAGENT.BUTTON.EDIT_QUESTION')" @click="editQuestion(message)"><el-icon><EditPen /></el-icon></button></el-tooltip>
                   </div>
                 </template>
@@ -326,10 +327,10 @@ const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 // 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
 const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 生成中状态标识（叠影方块）：三层半透明方块以不同速度、方向错位旋转，叠出不断变化的层次；不由 token 更新驱动。
+// 生成中状态标识：三个小圆点依次明暗起伏，克制、通用；不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
-  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, ['a', 'b', 'c'].map(part => h('i', { class: `activity-layer activity-layer-${part}` }))),
+  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i')]),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -1031,8 +1032,10 @@ function onWorkspaceKeydown(event: KeyboardEvent) {
   else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') { event.preventDefault(); newConversation(); }
   else if (event.shiftKey && event.key === 'Escape') { event.preventDefault(); inputRef.value?.focus(); }
 }
+function markCopied(id: string) { copiedMessageId.value = id; clearTimeout(copiedTimer); copiedTimer = setTimeout(() => { copiedMessageId.value = ''; }, 1800); }
+async function copyQuestion(message: ChatMessage) { if (await copyText(message.content)) markCopied(message.id); }
 async function copyAnswer(message: ChatMessage) {
-  if (await copyText(answerText(message))) { copiedMessageId.value = message.id; clearTimeout(copiedTimer); copiedTimer = setTimeout(() => { copiedMessageId.value = ''; }, 1800); }
+  if (await copyText(answerText(message))) markCopied(message.id);
 }
 
 const following = ref(true);
@@ -1087,13 +1090,13 @@ const welcomeExamples = ['ONE', 'TWO', 'THREE'];
 // ---- 展示层（2026-11 改版）：仅派生展示数据，不改变请求、事件解析与历史存储 ----
 // 新增文案沿用 attachmentCopy 的做法放在组件内，中英各一份，不新增外部语言包键。
 const uiCopy = computed(() => locale.value.toLowerCase().startsWith('zh') ? {
-  tryAsking: '试试这样问', fill: '填入', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
+  tryAsking: '试试这样问', fill: '填入', copy: '复制', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
   searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
   done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
   questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
   steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
 } : {
-  tryAsking: 'Try asking', fill: 'Use', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
+  tryAsking: 'Try asking', fill: 'Use', copy: 'Copy', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
   searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
   done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
   questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
@@ -2146,7 +2149,8 @@ function highlightCode(code: string, language: string): string {
   }
   return html + escapeHtml(code.slice(last));
 }
-const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>';
+const CHECK_ICON = '<svg class="copy-done" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+const COPY_ICON = '<svg class="copy-idle" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>';
 function renderMarkdown(source: string, depth = 0): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const result: string[] = [];
@@ -2173,7 +2177,7 @@ function renderMarkdown(source: string, depth = 0): string {
       if (i < lines.length) i++;
       const pre = `<pre><code>${highlightCode(code.join('\n'), fence[2])}</code></pre>`;
       result.push(`<div class="code-block"><div class="code-toolbar"><span>${escapeHtml(fence[2].trim() || t('AIAGENT.MARKDOWN.CODE'))}</span>`
-        + `<button type="button" data-copy-code title="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}" aria-label="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}">${COPY_ICON}</button></div>`
+        + `<button type="button" data-copy-code title="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}" aria-label="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}">${COPY_ICON}${CHECK_ICON}</button></div>`
         + (code.length > 14 ? `<details class="code-fold"><summary>${escapeHtml(t('AIAGENT.MARKDOWN.EXPAND_CODE', { lines: code.length }))}</summary>${pre}</details>` : pre) + '</div>');
       continue;
     }
@@ -2320,14 +2324,16 @@ async function copyText(content: string) {
     try { textarea.select(); copied = document.execCommand('copy'); } catch { copied = false; }
     finally { textarea.remove(); if (previous instanceof HTMLElement) previous.focus({ preventScroll: true }); }
   }
-  if (!disposed) { if (copied) ElMessage.success(t('AIAGENT.COPY.SUCCESS')); else ElMessage.warning(t('AIAGENT.COPY.FAILED')); }
+  // 成功时由按钮图标就地变为对勾来反馈，不再弹顶部提示；失败才提示。
+  if (!disposed && !copied) ElMessage.warning(t('AIAGENT.COPY.FAILED'));
   return copied;
 }
 function copyCode(event: MouseEvent) {
   if (!(event.target instanceof Element)) return;
   const button = event.target.closest('button[data-copy-code]');
   const code = button?.closest('.code-block')?.querySelector('pre code');
-  if (code) void copyText(code.textContent ?? '');
+  // 复制成功后按钮图标短暂变为对勾，给出就地反馈。
+  if (code) void copyText(code.textContent ?? '').then(copied => { if (!copied || !button) return; button.classList.add('copied'); setTimeout(() => button.classList.remove('copied'), 1800); });
 }
 let motionQuery: MediaQueryList | undefined;
 function syncMedia() { reducedMotion.value = !!motionQuery?.matches; }
@@ -2405,7 +2411,7 @@ button { font: inherit; }
 .history-empty { margin: 32px 0; text-align: center; font-size: 12.5px; color: var(--faint); }
 .history-group h2 { margin: 0; padding: 16px 10px 6px; font-size: 11.5px; font-weight: 500; letter-spacing: .4px; color: var(--faint); }
 .history-item { position: relative; display: flex; align-items: center; margin-bottom: 2px; border-radius: 8px; transition: background .12s, box-shadow .12s; }
-.history-item:hover, .history-item:focus-within { background: var(--hover); }
+.history-item:hover, .history-item:focus-within, .history-item:has(.history-more[aria-expanded="true"]) { background: var(--hover); }
 .history-item.selected { background: var(--hover); }
 .history-select { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 8px 10px 8px 12px; border: 0; background: transparent; text-align: left; color: var(--ink-2); cursor: pointer; }
 /* “⋯”按钮悬浮在行尾，未悬停时标题可占满整行。 */
@@ -2462,7 +2468,7 @@ button { font: inherit; }
 .trace-icon { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; }
 .trace-result { flex-shrink: 0; font-size: 15px; color: var(--success); }
 .mark-leave-active { transition: transform .26s cubic-bezier(.55,0,.75,.2), opacity .26s ease-in; }
-.mark-leave-to { opacity: 0; transform: scale(.2) rotate(90deg); }
+.mark-leave-to { opacity: 0; transform: scale(.6); }
 .mark-enter-active { transition: transform .34s cubic-bezier(.34,1.56,.64,1), opacity .2s ease-out; }
 .mark-enter-from { opacity: 0; transform: scale(.4); }
 .process.error .trace-result { color: var(--danger); }
@@ -2503,12 +2509,11 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：已确认的四片折叠动画，主题蓝、20px */
-:deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; animation: mark-in .42s cubic-bezier(.34,1.56,.64,1) backwards; }
-:deep(.activity-layer) { position: absolute; inset: 4px; border-radius: 3.5px; background: var(--blue); will-change: transform; }
-:deep(.activity-layer-a) { opacity: .4; animation: vds-layer-a 6s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-layer-b) { opacity: .55; animation: vds-layer-b 3s cubic-bezier(.45,0,.55,1) infinite; }
-:deep(.activity-layer-c) { inset: 6px; border-radius: 3px; animation: vds-layer-c 6s cubic-bezier(.45,0,.55,1) infinite; }
+/* 生成中标识：三个圆点依次明暗起伏 */
+:deep(.activity-mark) { display: flex; align-items: center; justify-content: center; gap: 3px; width: 20px; height: 20px; flex: 0 0 20px; }
+:deep(.activity-mark i) { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); animation: vds-dot 1.2s ease-in-out infinite both; }
+:deep(.activity-mark i:nth-child(2)) { animation-delay: .16s; }
+:deep(.activity-mark i:nth-child(3)) { animation-delay: .32s; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2684,6 +2689,8 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.code-toolbar) { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 38px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--line-soft); background: var(--fill-soft); color: var(--muted); font: 500 12px/1 ui-monospace, 'SF Mono', Consolas, monospace; letter-spacing: .3px; }
 :deep(.code-toolbar button) { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; transition: background .15s, color .15s; }
 :deep(.code-toolbar button:hover) { background: var(--hover); color: var(--ink); }
+:deep(.code-toolbar .copy-done), :deep(.code-toolbar button.copied .copy-idle) { display: none; }
+:deep(.code-toolbar button.copied .copy-done) { display: block; color: var(--success); }
 :deep(.code-block pre) { margin: 0; padding: 14px 18px 16px; overflow-x: auto; font-size: 13px; line-height: 1.75; tab-size: 4; }
 :deep(.code-block pre code) { padding: 0; white-space: pre; font-variant-ligatures: none; background: transparent; color: var(--ink-2); font-size: 13px; }
 :deep(.tok-k) { color: #2f5fe0; }
@@ -2708,17 +2715,14 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-layer-a{0%{transform:rotate(0deg) scale(1.1)}50%{transform:rotate(180deg) scale(.86)}100%{transform:rotate(360deg) scale(1.1)}}
-@keyframes vds-layer-b{0%{transform:rotate(45deg) scale(.9)}50%{transform:rotate(-45deg) scale(1.12)}100%{transform:rotate(-135deg) scale(.9)}}
-@keyframes vds-layer-c{0%,100%{transform:rotate(0deg) scale(1);border-radius:3px}25%{transform:rotate(-90deg) scale(.7);border-radius:50%}50%{transform:rotate(-180deg) scale(1);border-radius:3px}75%{transform:rotate(-270deg) scale(.7);border-radius:50%}}
-@keyframes mark-in{from{opacity:0;transform:scale(.4) rotate(-45deg)}to{opacity:1;transform:none}}
+@keyframes vds-dot { 0%, 70%, 100% { opacity: .28; transform: scale(.85); } 35% { opacity: 1; transform: scale(1.1); } }
 
 /* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  :deep(.activity-mark .activity-layer-a) { animation: vds-layer-a 6s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-layer-b) { animation: vds-layer-b 3s cubic-bezier(.45,0,.55,1) infinite !important; }
-  :deep(.activity-mark .activity-layer-c) { animation: vds-layer-c 6s cubic-bezier(.45,0,.55,1) infinite !important; }
+  :deep(.activity-mark i) { animation: vds-dot 1.2s ease-in-out infinite both !important; }
+  :deep(.activity-mark i:nth-child(2)) { animation-delay: .16s !important; }
+  :deep(.activity-mark i:nth-child(3)) { animation-delay: .32s !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
