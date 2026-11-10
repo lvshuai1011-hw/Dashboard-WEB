@@ -332,10 +332,15 @@ const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 // 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
 const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 生成中状态标识：品牌四方块的缩小版，四格按顺时针依次点亮；配合状态文字上的一道微光。不由 token 更新驱动。
+// 生成中状态标识：一条小折线反复“画出”，呼应产品的数据分析场景；底下垫一条同形的淡色轨迹，槽位不会空。
+// 配合状态文字上的一道微光。不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
+const ACTIVITY_PATH = 'M2.5 14.5 7.5 9l4 3.5 6-7.5';
 const ActivityMark = defineComponent({
-  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]),
+  setup: () => () => h('svg', { class: 'activity-mark', viewBox: '0 0 20 20', width: 20, height: 20, fill: 'none', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [
+    h('path', { class: 'activity-track', d: ACTIVITY_PATH }),
+    h('path', { class: 'activity-line', d: ACTIVITY_PATH, pathLength: 1 }),
+  ]),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -2498,7 +2503,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .step-icon { position: relative; z-index: 1; flex-shrink: 0; font-size: 16px; color: var(--muted); background: #fff; box-shadow: 0 0 0 4px #fff; }
 .step-row.skill { color: var(--faint); font-size: 13px; }
 .step-row.skill .step-icon { color: var(--faint); }
-.step-row.running .step-icon { color: var(--blue); animation: soft-pulse 1.6s ease-in-out infinite; }
+/* 只让图标本身呼吸；白色底衬保持不透明，才能一直遮住身后的时间线。 */
+.step-row.running .step-icon { color: var(--blue); }
+.step-row.running .step-icon :deep(svg) { animation: soft-pulse 1.6s ease-in-out infinite; }
 .step-row.running .step-name { color: var(--ink); font-weight: 500; }
 .step-row.error .step-icon, .step-row.error .step-name { color: var(--danger); }
 .step-name { flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2519,12 +2526,10 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：品牌四方块缩小版，四格顺时针依次点亮 */
-:deep(.activity-mark) { display: grid; grid-template-columns: 5px 5px; grid-template-rows: 5px 5px; gap: 2px; place-content: center; width: 20px; height: 20px; flex: 0 0 20px; }
-:deep(.activity-mark i) { border-radius: 1.5px; background: var(--blue); animation: vds-tile 1.6s ease-in-out infinite both; }
-:deep(.activity-mark i:nth-child(2)) { animation-delay: .2s; }
-:deep(.activity-mark i:nth-child(4)) { animation-delay: .4s; }
-:deep(.activity-mark i:nth-child(3)) { animation-delay: .6s; }
+/* 生成中标识：小折线反复画出 */
+:deep(.activity-mark) { display: block; flex: 0 0 20px; stroke: var(--blue); }
+:deep(.activity-track) { opacity: .16; }
+:deep(.activity-line) { stroke-dasharray: 1; stroke-dashoffset: 1; animation: vds-draw 1.9s cubic-bezier(.45,0,.3,1) infinite; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2726,16 +2731,13 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-tile { 0%, 55%, 100% { opacity: .2; } 20% { opacity: 1; } }
+@keyframes vds-draw { 0% { stroke-dashoffset: 1; opacity: 1; } 55%, 78% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
 @keyframes vds-shimmer { from { background-position: 100% 0; } to { background-position: -60% 0; } }
 
 /* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  :deep(.activity-mark i) { animation: vds-tile 1.6s ease-in-out infinite both !important; }
-  :deep(.activity-mark i:nth-child(2)) { animation-delay: .2s !important; }
-  :deep(.activity-mark i:nth-child(4)) { animation-delay: .4s !important; }
-  :deep(.activity-mark i:nth-child(3)) { animation-delay: .6s !important; }
+  :deep(.activity-line) { animation: vds-draw 1.9s cubic-bezier(.45,0,.3,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
