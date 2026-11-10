@@ -330,11 +330,17 @@ const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
-// 产品标识：蓝底白色字母 V（取自产品名 VDS）。右笔画收尾略高，带一点“上升”的意味。
+// 产品标识“玫瑰螺旋”：取自 ECharts 的玫瑰图——五个扇区半径逐个增大，绕成一个螺旋，像一枚展开的贝壳。
+// 路径由脚本按等宽间隙生成，整体已在 24×24 画布内居中；改形状请重新生成，不要手调单个数值。
+const BRAND_SECTORS = [
+  'M14.48 11.09L14.48 9.06A4.25 4.25 0 0 1 16.94 10.85L15.01 11.48A2.35 2.35 0 0 0 14.48 11.09Z',
+  'M15.69 13.57L18.79 12.56A5.45 5.45 0 0 1 17.40 16.84L15.49 14.20A2.35 2.35 0 0 0 15.69 13.57Z',
+  'M13.71 15.49L16.34 19.12A6.65 6.65 0 0 1 10.41 19.12L13.05 15.49A2.35 2.35 0 0 0 13.71 15.49Z',
+  'M11.27 14.20L7.92 18.81A7.85 7.85 0 0 1 5.64 11.81L11.06 13.57A2.35 2.35 0 0 0 11.27 14.20Z',
+  'M11.74 11.48L5.17 9.34A9.05 9.05 0 0 1 12.28 4.18L12.28 11.09A2.35 2.35 0 0 0 11.74 11.48Z',
+];
 const BrandMark = defineComponent({
-  setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', 'stroke-width': 2.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
-    h('path', { d: 'M6.6 8.2 11.4 17l6.4-11' }),
-  ])]),
+  setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('svg', { viewBox: '0 0 24 24', fill: '#fff', stroke: '#fff', 'stroke-width': 1.1, 'stroke-linejoin': 'round' }, BRAND_SECTORS.map(d => h('path', { d })))]),
 });
 // 生成中状态标识：一次完整的“呼吸”——吸气时圆点缓缓涨大，稍作停顿；呼气时圆点收回，同时一圈细环从边缘荡开、淡去。
 // 吸短呼长，一个周期约 3.6 秒。颜色为主题蓝实心。配合状态文字上的一道微光。不由 token 更新驱动。
