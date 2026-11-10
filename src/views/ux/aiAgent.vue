@@ -330,30 +330,19 @@ const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
-// 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
-const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 生成中状态标识（参考 Claude Code 的终端指示符）：一个小星形逐帧“呼吸”——从一个点长成十字、六角、八角星，再原路收回。
-// 逐帧切换而不是连续形变，每帧约 120ms；配合状态文字上的一道微光。不由 token 更新驱动。
-// 用户明确要求每次生成均自动播放此状态动效，因此不随“减少动态”设置停用。
-const ACTIVITY_FRAMES: [rays: number, radius: number, width: number][] = [[0, 1.7, 0], [4, 3.2, 1.7], [6, 4.6, 1.7], [6, 5.6, 1.9], [8, 6.3, 1.7], [8, 7, 1.9]];
-const ACTIVITY_ORDER = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1];
+// 产品图标：三根递增的柱子，对应“计费数据看板”。VDS 没有专属标识，这只是一个通用的产品图标。
+const BrandMark = defineComponent({
+  setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('svg', { viewBox: '0 0 24 24', fill: '#fff' }, [
+    h('rect', { x: 5.2, y: 12.5, width: 3.4, height: 6.5, rx: 1.2, opacity: 0.6 }),
+    h('rect', { x: 10.3, y: 9, width: 3.4, height: 10, rx: 1.2, opacity: 0.8 }),
+    h('rect', { x: 15.4, y: 5, width: 3.4, height: 14, rx: 1.2 }),
+  ])]),
+});
+// 生成中状态标识：一个缓慢“呼吸”的圆点——吸气时圆点略微涨大、外圈光晕浮现，稍作停顿后呼气收回；
+// 吸短呼长，一个周期约 3.2 秒，接近平静呼吸的节奏。配合状态文字上的一道微光。不由 token 更新驱动。
+// 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
 const ActivityMark = defineComponent({
-  setup() {
-    const step = ref(0);
-    let timer: ReturnType<typeof setInterval> | undefined;
-    onMounted(() => { timer = setInterval(() => { step.value = (step.value + 1) % ACTIVITY_ORDER.length; }, 120); });
-    onUnmounted(() => clearInterval(timer));
-    return () => {
-      const [rays, radius, width] = ACTIVITY_FRAMES[ACTIVITY_ORDER[step.value]];
-      const shapes = rays
-        ? Array.from({ length: rays / 2 }, (_, k) => {
-          const angle = Math.PI * 2 * k / rays - Math.PI / 2, x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
-          return h('line', { x1: 10 - x, y1: 10 - y, x2: 10 + x, y2: 10 + y });
-        })
-        : [h('circle', { cx: 10, cy: 10, r: radius, fill: 'currentColor', stroke: 'none' })];
-      return h('svg', { class: 'activity-mark', viewBox: '0 0 20 20', width: 20, height: 20, fill: 'none', stroke: 'currentColor', 'stroke-width': width || 1.7, 'stroke-linecap': 'round', 'aria-hidden': 'true' }, shapes);
-    };
-  },
+  setup: () => () => h('span', { class: 'activity-mark', 'aria-hidden': 'true' }, [h('i', { class: 'activity-halo' }), h('i', { class: 'activity-core' })]),
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -2419,10 +2408,8 @@ button { font: inherit; }
 .sidebar { width: 264px; flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 14px 12px 10px; background: var(--fill-soft); }
 .brand { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 2px 0 6px; }
 .brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-:deep(.brand-mark) { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; flex-shrink: 0; width: 24px; height: 24px; padding: 5px; border-radius: 6px; background: var(--blue); }
-:deep(.brand-mark i) { border-radius: 1.5px; background: #fff; }
-:deep(.brand-mark i:nth-child(2)) { opacity: .62; }
-:deep(.brand-mark i:nth-child(3)) { opacity: .8; }
+:deep(.brand-mark) { display: block; flex-shrink: 0; width: 24px; height: 24px; border-radius: 6px; background: var(--blue); }
+:deep(.brand-mark svg) { display: block; width: 100%; height: 100%; }
 .side-nav { display: grid; gap: 2px; margin-top: 12px; }
 .side-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 13.5px; text-align: left; cursor: pointer; transition: background .12s; }
 .side-row .el-icon { flex-shrink: 0; font-size: 16px; color: var(--muted); }
@@ -2539,8 +2526,11 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：逐帧呼吸的小星形，帧由组件定时切换 */
-:deep(.activity-mark) { display: block; flex: 0 0 20px; color: var(--blue); }
+/* 生成中标识：缓慢呼吸的圆点与光晕 */
+:deep(.activity-mark) { position: relative; display: block; width: 20px; height: 20px; flex: 0 0 20px; }
+:deep(.activity-mark i) { position: absolute; border-radius: 50%; animation: 3.2s cubic-bezier(.4,0,.4,1) infinite both; }
+:deep(.activity-core) { inset: 6px; background: var(--blue); animation-name: vds-breathe; }
+:deep(.activity-halo) { inset: 0; background: radial-gradient(circle, rgba(51,112,255,.42) 0%, rgba(51,112,255,.16) 45%, rgba(51,112,255,0) 70%); animation-name: vds-halo; }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2675,8 +2665,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* ---------- 起始页 ---------- */
 .chat-pane.is-welcome { justify-content: center; padding-bottom: 5vh; }
 .welcome { display: flex; flex-direction: column; align-items: center; padding: 0 40px 28px; text-align: center; animation: rise .45s ease-out both; }
-.welcome :deep(.welcome-mark) { width: 48px; height: 48px; gap: 4px; padding: 11px; border-radius: 13px; }
-.welcome :deep(.welcome-mark i) { border-radius: 3px; }
+.welcome :deep(.welcome-mark) { width: 48px; height: 48px; border-radius: 13px; }
 .welcome-title { margin: 24px 0 0; font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .5px; color: var(--ink); }
 .welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
@@ -2743,10 +2732,15 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes vds-shimmer { from { background-position: 100% 0; } to { background-position: -60% 0; } }
+@keyframes vds-breathe { 0%, 100% { transform: scale(.68); opacity: .75; } 40%, 50% { transform: scale(1); opacity: 1; } }
+@keyframes vds-halo { 0%, 100% { transform: scale(.5); opacity: 0; } 40%, 50% { transform: scale(1); opacity: 1; } }
 
-/* 减少动态：关闭其余动效；生成状态标识由组件定时切帧，按用户要求始终播放。 */
+/* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  :deep(.activity-mark i) { animation: 3.2s cubic-bezier(.4,0,.4,1) infinite both !important; }
+  :deep(.activity-core) { animation-name: vds-breathe !important; }
+  :deep(.activity-halo) { animation-name: vds-halo !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
