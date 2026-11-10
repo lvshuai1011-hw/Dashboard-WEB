@@ -332,15 +332,28 @@ const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 // 品牌标识：静止的四方块。生成中的状态动画见 ActivityMark。
 const BrandMark = defineComponent({ setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i'), h('i')]) });
-// 生成中状态标识：一条小折线反复“画出”，呼应产品的数据分析场景；底下垫一条同形的淡色轨迹，槽位不会空。
-// 配合状态文字上的一道微光。不由 token 更新驱动。
-// 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
-const ACTIVITY_PATH = 'M2.5 14.5 7.5 9l4 3.5 6-7.5';
+// 生成中状态标识（参考 Claude Code 的终端指示符）：一个小星形逐帧“呼吸”——从一个点长成十字、六角、八角星，再原路收回。
+// 逐帧切换而不是连续形变，每帧约 120ms；配合状态文字上的一道微光。不由 token 更新驱动。
+// 用户明确要求每次生成均自动播放此状态动效，因此不随“减少动态”设置停用。
+const ACTIVITY_FRAMES: [rays: number, radius: number, width: number][] = [[0, 1.7, 0], [4, 3.2, 1.7], [6, 4.6, 1.7], [6, 5.6, 1.9], [8, 6.3, 1.7], [8, 7, 1.9]];
+const ACTIVITY_ORDER = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1];
 const ActivityMark = defineComponent({
-  setup: () => () => h('svg', { class: 'activity-mark', viewBox: '0 0 20 20', width: 20, height: 20, fill: 'none', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [
-    h('path', { class: 'activity-track', d: ACTIVITY_PATH }),
-    h('path', { class: 'activity-line', d: ACTIVITY_PATH, pathLength: 1 }),
-  ]),
+  setup() {
+    const step = ref(0);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    onMounted(() => { timer = setInterval(() => { step.value = (step.value + 1) % ACTIVITY_ORDER.length; }, 120); });
+    onUnmounted(() => clearInterval(timer));
+    return () => {
+      const [rays, radius, width] = ACTIVITY_FRAMES[ACTIVITY_ORDER[step.value]];
+      const shapes = rays
+        ? Array.from({ length: rays / 2 }, (_, k) => {
+          const angle = Math.PI * 2 * k / rays - Math.PI / 2, x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
+          return h('line', { x1: 10 - x, y1: 10 - y, x2: 10 + x, y2: 10 + y });
+        })
+        : [h('circle', { cx: 10, cy: 10, r: radius, fill: 'currentColor', stroke: 'none' })];
+      return h('svg', { class: 'activity-mark', viewBox: '0 0 20 20', width: 20, height: 20, fill: 'none', stroke: 'currentColor', 'stroke-width': width || 1.7, 'stroke-linecap': 'round', 'aria-hidden': 'true' }, shapes);
+    };
+  },
 });
 // 与现有线性图标统一的赞/踩图形。文案意图为“有帮助 / 没有帮助”；没有新增外部 t() 键。
 const FeedbackIcon = defineComponent({
@@ -2526,10 +2539,8 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .raw-details summary:hover { color: var(--blue); }
 .raw { max-height: 280px; margin: 6px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--fill-soft); color: var(--ink-2); font: 12px/1.7 ui-monospace, Consolas, 'SF Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* 生成中标识：小折线反复画出 */
-:deep(.activity-mark) { display: block; flex: 0 0 20px; stroke: var(--blue); }
-:deep(.activity-track) { opacity: .16; }
-:deep(.activity-line) { stroke-dasharray: 1; stroke-dashoffset: 1; animation: vds-draw 1.9s cubic-bezier(.45,0,.3,1) infinite; }
+/* 生成中标识：逐帧呼吸的小星形，帧由组件定时切换 */
+:deep(.activity-mark) { display: block; flex: 0 0 20px; color: var(--blue); }
 
 /* 正文 */
 .answer-part + .answer-part { margin-top: 16px; }
@@ -2731,13 +2742,11 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes text-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes vds-draw { 0% { stroke-dashoffset: 1; opacity: 1; } 55%, 78% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
 @keyframes vds-shimmer { from { background-position: 100% 0; } to { background-position: -60% 0; } }
 
-/* 减少动态：关闭其余动效；按用户要求保留生成状态标识动画。 */
+/* 减少动态：关闭其余动效；生成状态标识由组件定时切帧，按用户要求始终播放。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, :deep(*), :deep(*::before), :deep(*::after) { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  :deep(.activity-line) { animation: vds-draw 1.9s cubic-bezier(.45,0,.3,1) infinite !important; }
 }
 </style>
 <!-- 下拉菜单渲染在 body 下，需非 scoped 样式；类名带 agent- 前缀避免影响门户其它页面。 -->
