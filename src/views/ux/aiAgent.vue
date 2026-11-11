@@ -147,7 +147,7 @@
                   </div>
 
                   <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
-                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :highlight="item.id === keyMarkPart(message)" :sweep="justFinished(message)" @progress="scheduleScroll" />
+                    <Typewriter v-if="item.kind === 'text'" :content="item.text" :active="isActive(message)" :highlight="item.id === keyMarkPart(message)" :sweep="justFinished(message)" :settled="replySettled(message)" @progress="scheduleScroll" />
                     <div v-else-if="item.kind === 'chart'" class="result-card">
                       <div class="result-head">
                         <strong>{{ item.chart?.title || t('AIAGENT.CHART.TITLE') }}</strong>
@@ -1989,10 +1989,12 @@ function isActive(message: ChatMessage) { return running.has(message.id); }
 // 追问在结束帧之后下发：答复先完成、过程先收起；连接再保留片刻，只接收追问 json。
 const FOLLOW_UP_WAIT = 20_000;
 const tails = new Map<string, { abort: () => void; timer: ReturnType<typeof setTimeout> }>();
+// 仍在等待追问建议的答复（tails 不是响应式的，这里另记一份供界面判断答复是否已落定）。
+const tailing = reactive(new Set<string>());
 function endTail(messageId: string) {
   const tail = tails.get(messageId);
   if (!tail) return;
-  tails.delete(messageId); clearTimeout(tail.timer); tail.abort();
+  tails.delete(messageId); tailing.delete(messageId); clearTimeout(tail.timer); tail.abort();
 }
 function acceptTailEvent(message: ChatMessage, event: StreamEvent) {
   if (event.outerEvent !== 'ExecuteAgentNormal' || (event.innerEvent !== 'json' && event.innerEvent !== 'subagent_json')) return;
@@ -2013,7 +2015,7 @@ function finishRequest(messageId: string, message: ChatMessage, status: 'complet
   // 完成后收起过程卡，让答复正文成为视觉主体；图表属于正文，保持展开。
   if (status === 'completed') message.process.forEach(p => { if (p.kind !== 'chart') p.expanded = false; });
   if (!running.size) { clearInterval(elapsedTimer); elapsedTimer = undefined; }
-  if (keepTail && !disposed) tails.set(messageId, { abort: handle.abort, timer: setTimeout(() => endTail(messageId), FOLLOW_UP_WAIT) });
+  if (keepTail && !disposed) { tails.set(messageId, { abort: handle.abort, timer: setTimeout(() => endTail(messageId), FOLLOW_UP_WAIT) }); tailing.add(messageId); }
   else handle.abort();
   persistHistory(); scheduleScroll();
 }
@@ -2252,12 +2254,16 @@ function typingChunk(pending: string): string {
 function justFinished(message: ChatMessage) {
   return message.status === 'completed' && !!message.finishedAt && Date.now() - message.finishedAt < 1500;
 }
+// 答复已落定：追问建议已收到，或等待追问的连接已经收尾。此后版面不会再因这条答复跳动。
+function replySettled(message: ChatMessage) {
+  return !!message.followUps?.length || !tailing.has(message.id);
+}
 // 正文中第一个含 **加粗** 的文本块；整条回答只高亮这一处。
 function keyMarkPart(message: ChatMessage) {
   return layout(message).body.find(item => item.kind === 'text' && /\*\*[^*\n]+\*\*/.test(item.text))?.id;
 }
 const Typewriter = defineComponent({
-  props: { content: { type: String, required: true }, active: Boolean, highlight: Boolean, sweep: Boolean }, emits: ['progress'],
+  props: { content: { type: String, required: true }, active: Boolean, highlight: Boolean, sweep: Boolean, settled: { type: Boolean, default: true } }, emits: ['progress'],
   setup(props, { emit }) {
     const displayed = ref(''); let observed = '', pending = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -2286,13 +2292,39 @@ const Typewriter = defineComponent({
     // 重点高亮（参考 Google AI 模式）：只给正文第一处 **加粗** 加浅蓝底。
     // 答复刚落到正文时（sweep）像荧光笔一样从左到右刷出；历史消息直接显示底色，不播放动画。
     // innerHTML 更新会重建节点，按挂载时间算负的 animation-delay 接续进度，避免动画重播。
+    // 刷出时机：答复刚落入正文时，执行过程收起、追问建议出现并自动滚动都会让版面跳动，
+    // 若立即开刷，动画会和这些跳动挤在一起，几乎看不出来。因此先保持“未刷”状态，
+    // 等答复落定（settled）且加粗处的位置连续 SETTLE_MS 不再变化后才开始；最多等 SWEEP_MAX_WAIT，避免后端迟迟不发追问时一直不刷。
+    // innerHTML 更新会重建节点，开刷后按开刷时刻算负的 animation-delay 接续进度，避免动画重播。
+    const SETTLE_MS = 300, SWEEP_MAX_WAIT = 2600;
     const mountedAt = performance.now();
+    let sweepState: 'idle' | 'waiting' | 'playing' = props.sweep && !reducedMotion.value ? 'waiting' : 'idle';
+    let sweepAt = 0, settleFrame = 0;
     const paintMarks = () => {
       const el = props.highlight ? root.value?.querySelector('strong') : null;
       if (!el) return;
       el.classList.add('key-mark');
-      if (props.sweep && !reducedMotion.value) { el.classList.add('mark-sweep'); el.style.animationDelay = `${mountedAt - performance.now() + 280}ms`; }
+      if (sweepState === 'waiting') el.classList.add('mark-wait');
+      else if (sweepState === 'playing') {
+        el.classList.remove('mark-wait'); el.classList.add('mark-sweep');
+        el.style.animationDelay = `${Math.round(sweepAt - performance.now())}ms`;
+      }
     };
+    const waitForSettle = () => {
+      let lastTop = Number.NaN, stableSince = performance.now();
+      const step = () => {
+        settleFrame = 0;
+        if (sweepState !== 'waiting') return;
+        const now = performance.now(), el = root.value?.querySelector('strong.key-mark');
+        if (el) { const top = Math.round(el.getBoundingClientRect().top); if (top !== lastTop) { lastTop = top; stableSince = now; } }
+        if ((props.settled && el && now - stableSince >= SETTLE_MS) || now - mountedAt >= SWEEP_MAX_WAIT) {
+          sweepState = 'playing'; sweepAt = now; paintMarks(); return;
+        }
+        settleFrame = requestAnimationFrame(step);
+      };
+      settleFrame = requestAnimationFrame(step);
+    };
+    onUnmounted(() => cancelAnimationFrame(settleFrame));
     // 浮现式输出：不显示输入光标，新出现的文字在约半秒内淡入。
     // innerHTML 每次更新都会重建节点，因此记录每段文字出现的时刻，重建后按已播放时长（负的 animation-delay）接续，不会重播。
     const FADE_MS = 480, NO_WRAP = /^(?:UL|OL|TABLE|THEAD|TBODY|TR)$/;
@@ -2327,7 +2359,7 @@ const Typewriter = defineComponent({
         }
       }
     };
-    const mounted = () => { paintMarks(); fadeIn(); };
+    const mounted = () => { paintMarks(); fadeIn(); if (sweepState === 'waiting') waitForSettle(); };
     const updated = () => { restoreDetails(); paintMarks(); fadeIn(); };
     return () => h('div', { class: ['typewriter', { active: props.active }] }, [
       h('div', { ref: root, class: 'markdown-body', innerHTML: html.value, onClick: copyCode, onToggleCapture: scheduleScroll, onVnodeBeforeUpdate: captureDetails, onVnodeMounted: mounted, onVnodeUpdated: updated }),
@@ -2696,7 +2728,9 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.markdown-body h1), :deep(.markdown-body h2) { font-size: 1.18em; }
 :deep(.markdown-body strong) { font-weight: 600; color: var(--ink); }
 .answer-part :deep(.markdown-body strong.key-mark) { padding: 1px 2px; border-radius: 3px; background: linear-gradient(var(--mark), var(--mark)) 0 0 / 100% 100% no-repeat; }
-.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 1.6s cubic-bezier(.4,0,.3,1) both; }
+.answer-part :deep(.markdown-body strong.key-mark.mark-wait) { background-size: 0% 100%; }
+/* 前后均匀的缓动：从左到右匀速刷过，开头和收尾略缓，便于看清。 */
+.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 1.6s cubic-bezier(.45,.05,.55,.95) both; }
 @keyframes mark-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
