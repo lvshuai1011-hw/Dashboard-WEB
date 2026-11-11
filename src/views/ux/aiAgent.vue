@@ -1416,7 +1416,9 @@ function addProcess(message: ChatMessage, kind: ProcessKind): ProcessItem {
 }
 // 文本轮：同一 messageId 的事件持续追加到同一轮，messageId 变化即新开一轮。
 function appendTextTurn(message: ChatMessage, textId: string, chunk: string): ProcessItem {
-  let item = message.process.find(p => p.kind === 'text' && p.toolName === textId);
+  // 图表是正文分界，即便上游复用 messageId，也不能继续追加到图表前的思考轮。
+  const chartIndex = message.process.map(p => p.kind).lastIndexOf('chart');
+  let item = message.process.slice(chartIndex + 1).find(p => p.kind === 'text' && p.toolName === textId);
   if (!item) {
     // 上一轮文本到此结束，收尾为已完成，避免旧轮一直显示加载态。
     message.process.forEach(p => { if (p.kind === 'text' && p.status === 'running') closeProcess(p); });
@@ -1425,33 +1427,28 @@ function appendTextTurn(message: ChatMessage, textId: string, chunk: string): Pr
   item.text += chunk;
   return item;
 }
-// 判定哪一轮文本是给用户看的答复。实测发现两种服务端形态都要兼容：
-//   1) finish_stop.messageId 能对上某个文本轮 → 直接用（最可靠，Dashboard 的机制）；
-//   2) 对不上（实测 SDA 常见：finish_stop 带的是新 id，前面从未出现过）→ 回落。
-// 回落不能简单取「最后一个文本轮」：实测最后一轮往往是 "Query succeeded, but I notice..."
-// 这类调试碎碎念。因此再看最后一轮之后有没有图表——纯图表回答时 summary 才是结论。
+// 有图表时按事件顺序划分正文；无图表时保留 finish_stop 指定轮次 / 最后一轮的回落逻辑。
 function markFinalTurn(message: ChatMessage, messageId: string) {
+  if (message.process.some(p => p.kind === 'chart')) return;
   const texts = message.process.filter(p => p.kind === 'text');
   if (!texts.length) return;
   const matched = messageId ? texts.find(p => p.toolName === messageId) : undefined;
-  if (matched) { matched.isFinal = true; return; }
-  // 没有任何图表：最后一轮文本就是答复（即便读起来像叙述，也没有别的可展示内容）。
-  if (!message.process.some(p => p.kind === 'chart')) { texts[texts.length - 1].isFinal = true; return; }
-  // 有图表：文本是过程，答复由图表标题 + summary 承担，这里不再提升任何文本。
-  // 这样避免了把 "Query succeeded, but I notice..." 当成结论显示给用户。
+  (matched || texts[texts.length - 1]).isFinal = true;
 }
-// 流式期间全部平铺流出（参考 Dashboard：items 一维数组逐条渲染，文字随 token 实时增长）；
-// 结束后只有 isFinal 文本 + 图表留在正文，其余过程收进折叠区。
-// 注意「流式期间不划分」正是 Dashboard 不会横跳的原因：划分只发生一次，就在结束时。
 function bodyTextIds(message: ChatMessage): Set<number> {
   const ids = new Set<number>();
-  if (message.status !== 'completed') return ids;
-  message.process.forEach(item => { if (item.kind === 'text' && item.isFinal && item.text.trim()) ids.add(item.id); });
+  const hasChart = message.process.some(p => p.kind === 'chart');
+  let afterChart = false;
+  for (const item of message.process) {
+    if (item.kind === 'chart') afterChart = true;
+    // 图表之后的总结立即进入正文，停止、报错或加载历史时也保持原位置。
+    // follow_up JSON 单独保存，不参与图表分界或文本轮次判定。
+    if (item.kind === 'text' && item.text.trim()
+      && (hasChart ? afterChart : message.status === 'completed' && item.isFinal)) ids.add(item.id);
+  }
   return ids;
 }
-// 正文 = isFinal 文本 + 所有图表；其余过程按时间顺序进折叠框。
-// 注意：流式期间**也要**把过程项留在 timeline 里，否则折叠框根本不存在——
-// 那样用户只有等回答结束才看到它，观感就不是「边跑边有个思考框」。
+// 正文按接收顺序显示图表及其后文本，其余事件留在思考过程。
 function layout(message: ChatMessage): MessageLayout {
   const textIds = bodyTextIds(message);
   const timeline: ProcessItem[] = [], body: ProcessItem[] = [];
