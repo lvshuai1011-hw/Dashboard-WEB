@@ -558,7 +558,7 @@ const ATTACHMENT_ACCEPT = '.pdf,.pptx,.docx,.xlsx,.txt,.md,.markdown,.csv,.json,
 const MAX_OFFICE_EXPANDED_BYTES = 24 * 1024 * 1024;
 const MAX_DOCUMENT_PAGES = 200;
 // 字体/CMap 随 Vite 打包到同源静态资源，不从 CDN 读取；兼容原工程 Vite 4/5。
-const pdfAssets = import.meta.glob('/node_modules/pdfjs-dist/{cmaps,standard_fonts}/*', { eager: true, as: 'url' }) as Record<string, string>;
+const pdfAssets = import.meta.glob('/node_modules/pdfjs-dist/{cmaps,standard_fonts}/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 class PdfBinaryDataFactory {
   async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
     const folder = kind === 'cMapUrl' ? 'cmaps' : kind === 'standardFontDataUrl' ? 'standard_fonts' : '';
