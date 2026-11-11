@@ -12,20 +12,84 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 - 代码块带轻量语法着色（注释 / 字符串 / 数字 / 关键字，不引入高亮库）；报错在消息内以卡片呈现，仅当出错会话不在前台时才额外弹出顶部提示。
 - 起始页：品牌标识、标题与说明、输入框和“试试这样问”引导问题列表（直接展示完整问题，不依赖专属图标）；底部免责声明。
 
-## 本地预览
+## 本地部署
 
-建议使用 Node.js 22.13+（或 Node.js 24）。
+独立运行本页面（脱离原门户），只需要 Node.js 和 npm，不依赖后端、数据库或外网服务。
+
+### 1. 准备环境
+
+| 项目 | 要求 |
+| --- | --- |
+| Node.js | 22.13 及以上（或 24），用 `node -v` 确认 |
+| npm | 随 Node.js 安装，用 `npm -v` 确认 |
+| 浏览器 | 最新版 Chrome / Edge；仅支持网页端，不适配手机 |
+
+### 2. 获取代码并安装依赖
 
 ```bash
+git clone https://github.com/lvshuai1011-hw/dashboard-web.git
+cd dashboard-web
 npm ci
+```
+
+`npm ci` 严格按 `package-lock.json` 安装，保证版本和他人一致；首次安装需要联网，之后离线也能运行。
+
+### 3. 开发模式（改代码时用）
+
+```bash
 npm run dev -- --host localhost --port 5180
 ```
 
-中文：http://localhost:5180/
+- 中文：http://localhost:5180/
+- 英文：http://localhost:5180/?lang=en
 
-英文：http://localhost:5180/?lang=en
+保存文件后页面自动热更新。端口被占用时换一个 `--port` 即可。
 
-预览默认使用 `src/demo-transport.js` 在浏览器内模拟 SSE，不连接真实 AI 服务。输入“趋势”“表格”“代码”“长文”“报错”“断流”可测试不同场景；英文也支持 trend、table、code、error、premature eof。
+### 4. 生产构建与预览（交付、演示时用）
+
+```bash
+npm run build
+npx vite preview --host localhost --port 5181
+```
+
+- 构建产物在 `dist/`，是纯静态文件（一个 `index.html` 加 `assets/`），不需要 Node.js 就能运行。
+- 预览地址：http://localhost:5181/
+- 构建时出现“chunk 大于 500 kB”的提示是正常的，不影响使用。
+
+### 5. 部署到静态服务器
+
+把 `dist/` 整个目录放到任意静态服务器（nginx、Apache、对象存储静态站点等）的网站根目录即可。以 nginx 为例：
+
+```nginx
+server {
+  listen 8080;
+  root /var/www/dashboard-web/dist;
+  index index.html;
+}
+```
+
+- 如果要放在子路径（例如 `/ai/`）下，构建时指定：`npx vite build --base=/ai/`。
+- 局域网内其他人访问，把 `--host localhost` 改成 `--host 0.0.0.0`，并确认防火墙放行对应端口。
+
+### 6. 验证是否部署成功
+
+打开页面后：
+
+1. 起始页显示标识、“电信计费数据问答”和三条示例问题；
+2. 点击示例问题，再按 Enter 发送；
+3. 约 1 秒后出现“思考”过程，随后出现结果卡片（图表）、文字答复和三条追问建议。
+
+预览默认使用 `src/demo-transport.js` 在浏览器内模拟 SSE，不连接真实 AI 服务，所以断网也能完成上面的验证。输入“趋势”“表格”“代码”“长文”“报错”“断流”可测试不同场景；英文也支持 trend、table、code、error、premature eof。
+
+### 7. 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| `npm ci` 报 Node 版本不满足 | 升级到 Node.js 22.13 及以上 |
+| 端口已被占用 | 换一个 `--port`，或先结束占用该端口的进程 |
+| 页面空白 | 打开浏览器开发者工具的 Console 看报错；确认访问的是 `/` 而不是文件路径（不能直接双击 `dist/index.html`） |
+| 子路径部署后样式、脚本 404 | 构建时漏了 `--base`，见上面第 5 步 |
+| 历史会话在换浏览器后没有了 | 会话只保存在当前浏览器的本地存储里，这是设计如此 |
 
 ## 追问建议（后端约定）
 
@@ -48,8 +112,6 @@ npm run dev -- --host localhost --port 5180
 
 ## 编译与交付
 
-```bash
-npm run build
-```
+构建命令见上面“本地部署”。`delivery/` 目录下的 `aiAgent-ui-delivery.zip`（组件、交付说明、构建记录和 PDF/PPTX 样例）和说明文档是 2026-11 界面改版之前生成的，内容已落后于当前源码，正式交付前需要重新生成。
 
-`delivery/aiAgent-ui-delivery.zip` 包含组件、交付说明、构建记录和 PDF/PPTX 样例。最新修改通过 ESLint 和 Vite 构建；Linux 等效构建结果为 `BUILD OK: dist/`，未运行 Windows PowerShell 脚本。
+最新代码已用 `npm run build` 验证可以构建，构建产物用 `vite preview` 跑通了问答、图表和追问建议；本仓库没有配置 ESLint，也没有运行过 Windows PowerShell 脚本。
