@@ -2300,8 +2300,12 @@ const Typewriter = defineComponent({
         el.classList.remove('mark-wait', 'mark-sweep'); el.style.animationDelay = '';
       } else if (sweepState === 'waiting') el.classList.add('mark-wait');
       else if (sweepState === 'playing') {
-        el.classList.remove('mark-wait'); el.classList.add('mark-sweep');
-        el.style.animationDelay = `${Math.round(sweepAt - performance.now())}ms`;
+        el.classList.remove('mark-wait');
+        // 仅在新节点上恢复进度；已有节点继续自己的时间线，避免更新时重复扣减延迟。
+        if (!el.classList.contains('mark-sweep')) {
+          el.style.animationDelay = `${Math.round(sweepAt - performance.now())}ms`;
+          el.classList.add('mark-sweep');
+        }
       }
     };
     const waitForSettle = () => {
@@ -2732,8 +2736,8 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 :deep(.markdown-body strong) { font-weight: 600; color: var(--ink); }
 .answer-part :deep(.markdown-body strong.key-mark) { padding: 1px 2px; border-radius: 3px; background: linear-gradient(var(--mark), var(--mark)) 0 0 / 100% 100% no-repeat; }
 .answer-part :deep(.markdown-body strong.key-mark.mark-wait) { background-size: 0% 100%; }
-/* 前后均匀的缓动：从左到右匀速刷过，开头和收尾略缓，便于看清。 */
-.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 1.6s cubic-bezier(.45,.05,.55,.95) both; }
+/* 匀速扫过，留足时间看清高亮前沿。 */
+.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 2.4s linear both; }
 @keyframes mark-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
