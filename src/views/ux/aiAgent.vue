@@ -2737,7 +2737,7 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 .answer-part :deep(.markdown-body strong.key-mark) { padding: 1px 2px; border-radius: 3px; background: linear-gradient(var(--mark), var(--mark)) 0 0 / 100% 100% no-repeat; }
 .answer-part :deep(.markdown-body strong.key-mark.mark-wait) { background-size: 0% 100%; }
 /* 匀速扫过，留足时间看清高亮前沿。 */
-.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 1.2s linear both; }
+.answer-part :deep(.markdown-body strong.mark-sweep) { animation: mark-sweep 0.8s linear both; }
 @keyframes mark-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 22px; margin: 10px 0; }
 :deep(.markdown-body li) { margin: 4px 0; padding-left: 2px; }
