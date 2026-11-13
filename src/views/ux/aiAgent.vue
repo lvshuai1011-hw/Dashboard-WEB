@@ -76,11 +76,21 @@
               <text class="welcome-wordmark" x="270" y="43" text-anchor="middle">{{ dashboardName }}</text>
             </svg>
           </h2>
-          <div class="welcome-wave" aria-hidden="true">
-            <div v-for="row in 3" :key="row" class="welcome-wave-row">
-              <span v-for="column in 25" :key="column" :style="{ '--wave-delay': `${(column - 1) * 42 + (row - 1) * 80}ms` }" />
-            </div>
-          </div>
+          <svg class="welcome-chart" viewBox="0 0 330 80" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient :id="welcomeChartGradientId" x2="0%" y2="100%">
+                <stop stop-color="currentColor" stop-opacity=".16" />
+                <stop offset="1" stop-color="currentColor" stop-opacity=".015" />
+              </linearGradient>
+            </defs>
+            <path class="welcome-chart-grid" d="M12 23H318M12 46H318M12 69H318" />
+            <path class="welcome-chart-area" :d="`${welcomeChartLine} V69 H12Z`" :fill="`url(#${welcomeChartGradientId})`" />
+            <path class="welcome-chart-line" pathLength="1" :d="welcomeChartLine" />
+            <g class="welcome-chart-endpoint">
+              <circle cx="318" cy="11" r="7" fill="var(--blue-soft)" />
+              <circle cx="318" cy="11" r="3.5" fill="currentColor" />
+            </g>
+          </svg>
         </div>
 
         <div v-else class="chat-scroll-area">
@@ -269,7 +279,7 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, useId, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElButton, ElInput, ElIcon, ElTooltip, ElScrollbar, ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, type InputInstance, type ScrollbarInstance } from 'element-plus';
 import { ArrowDown, Check, ChatLineRound, CircleCheck, CircleClose, Close, Connection, CopyDocument, Delete, Document, Download, EditPen, InfoFilled, Loading, Paperclip, Top, RefreshRight, Search, Star, StarFilled, VideoPause, Warning } from '@element-plus/icons-vue';
@@ -337,6 +347,8 @@ const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
 const dashboardName = 'VDS RealTime Dashboard';
+const welcomeChartGradientId = `${useId()}-welcome-chart-area`;
+const welcomeChartLine = 'M12 63 L49 56 83 59 120 36 154 45 190 29 226 35 262 21 294 25 318 11';
 // 生成中状态标识：一次完整的“呼吸”——吸气时圆点缓缓涨大，稍作停顿；呼气时圆点收回，同时一圈细环从边缘荡开、淡去。
 // 吸短呼长，一个周期约 3.6 秒。颜色为主题蓝实心。配合状态文字上的一道微光。不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
@@ -2712,25 +2724,25 @@ button.step-row:hover .step-chevron { color: var(--muted); }
   letter-spacing: -.9px;
   animation: vds-wordmark-write 1.65s ease-out both;
 }
-.welcome-wave { width: min(88%, 420px); display: grid; gap: 6px; margin: 10px 0 4px; }
-.welcome-wave-row { display: grid; grid-template-columns: repeat(25, minmax(0, 1fr)); justify-items: center; }
-.welcome-wave-row span {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--blue);
-  opacity: .14;
-  animation: vds-welcome-wave 1.35s ease-in-out var(--wave-delay) both;
+.welcome-chart { display: block; width: min(100%, 330px); margin: 13px 0 4px; color: var(--blue); }
+.welcome-chart-grid { fill: none; stroke: var(--blue-soft); stroke-dasharray: 3 5; }
+.welcome-chart-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  animation: vds-welcome-chart-draw 1.15s .18s ease-out both;
 }
+.welcome-chart-area { animation: text-in .36s .96s ease-out both; }
+.welcome-chart-endpoint { animation: text-in .36s 1.33s ease-out both; }
 @keyframes vds-wordmark-write {
   0% { fill-opacity: 0; stroke-width: 1; stroke-dasharray: 0 180; }
   70% { fill-opacity: 0; stroke-width: 1; stroke-dasharray: 180 0; }
   100% { fill-opacity: 1; stroke-width: 0; stroke-dasharray: 180 0; }
 }
-@keyframes vds-welcome-wave {
-  0%, 100% { opacity: .14; transform: scale(.65); }
-  50% { opacity: .58; transform: scale(1.45); }
-}
+@keyframes vds-welcome-chart-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
 .examples { display: grid; gap: 8px; margin-top: 18px; }
