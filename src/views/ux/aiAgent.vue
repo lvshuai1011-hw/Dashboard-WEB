@@ -81,7 +81,6 @@
               <span v-for="column in 25" :key="column" :style="{ '--wave-delay': `${(column - 1) * 42 + (row - 1) * 80}ms` }" />
             </div>
           </div>
-          <p class="welcome-tip">{{ t('AIAGENT.WELCOME.TIP') }}</p>
         </div>
 
         <div v-else class="chat-scroll-area">
@@ -2732,7 +2731,6 @@ button.step-row:hover .step-chevron { color: var(--muted); }
   0%, 100% { opacity: .14; transform: scale(.65); }
   50% { opacity: .58; transform: scale(1.45); }
 }
-.welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
 .examples { display: grid; gap: 8px; margin-top: 18px; }
