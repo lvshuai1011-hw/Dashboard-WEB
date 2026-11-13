@@ -4,7 +4,7 @@
       <!-- 侧栏：品牌、新建、搜索、按时间分组的历史会话 -->
       <aside v-if="sidebarOpen" class="sidebar">
         <div class="brand">
-          <h1 :title="dashboardName">{{ dashboardName }}</h1>
+          <h1>SeekSettlement</h1>
           <el-tooltip :content="uiCopy.collapse" placement="bottom"><button class="icon-button" type="button" :aria-label="uiCopy.collapse" :aria-expanded="true" @click="toggleSidebar"><el-icon><PanelIcon /></el-icon></button></el-tooltip>
         </div>
         <!-- 侧栏导航为无边框列表行；点击“搜索会话”后整块切换为搜索视图，返回或 Esc 退出。 -->
