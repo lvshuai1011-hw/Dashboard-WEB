@@ -1,11 +1,10 @@
 <template>
-  <section ref="processRoot" class="agent-page" :aria-label="t('AIAGENT.BRAND')" @keydown="onWorkspaceKeydown">
+  <section ref="processRoot" class="agent-page" :aria-label="dashboardName" @keydown="onWorkspaceKeydown">
     <div class="workspace">
       <!-- 侧栏：品牌、新建、搜索、按时间分组的历史会话 -->
       <aside v-if="sidebarOpen" class="sidebar">
         <div class="brand">
-          <BrandMark />
-          <h1 :title="t('AIAGENT.BRAND')">{{ t('AIAGENT.BRAND') }}</h1>
+          <h1 :title="dashboardName">{{ dashboardName }}</h1>
           <el-tooltip :content="uiCopy.collapse" placement="bottom"><button class="icon-button" type="button" :aria-label="uiCopy.collapse" :aria-expanded="true" @click="toggleSidebar"><el-icon><PanelIcon /></el-icon></button></el-tooltip>
         </div>
         <!-- 侧栏导航为无边框列表行；点击“搜索会话”后整块切换为搜索视图，返回或 Esc 退出。 -->
@@ -72,8 +71,16 @@
 
         <!-- 起始页 -->
         <div v-if="!messages.length" class="welcome">
-          <BrandMark class="welcome-mark" />
-          <h2 class="welcome-title">{{ t('AIAGENT.WELCOME.TITLE') }}</h2>
+          <h2 class="welcome-title" :aria-label="dashboardName">
+            <svg viewBox="0 0 540 60" aria-hidden="true" focusable="false">
+              <text class="welcome-wordmark" x="270" y="43" text-anchor="middle">{{ dashboardName }}</text>
+            </svg>
+          </h2>
+          <div class="welcome-wave" aria-hidden="true">
+            <div v-for="row in 3" :key="row" class="welcome-wave-row">
+              <span v-for="column in 25" :key="column" :style="{ '--wave-delay': `${(column - 1) * 42 + (row - 1) * 80}ms` }" />
+            </div>
+          </div>
           <p class="welcome-tip">{{ t('AIAGENT.WELCOME.TIP') }}</p>
         </div>
 
@@ -330,19 +337,7 @@ const ArrowRightIcon = lineIcon(['M5 12h14', 'm12 5 7 7-7 7']);
 const FillIcon = lineIcon(['M14 9 9 4 4 9', 'M20 20h-7a4 4 0 0 1-4-4V4']);
 const NewChatIcon = lineIcon(['M12 20h9', 'M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z']);
 const StopIcon = defineComponent({ setup: () => () => h('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', 'aria-hidden': 'true' }, [h('rect', { x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor' })]) });
-// 产品标识“玫瑰螺旋”：取自 ECharts 的玫瑰图——六个扇区半径逐个增大、颜色由浅到深，绕成一个螺旋。
-// 白底蓝图，不带底色方块；扇区之间的缝隙用所在背景色描边得到（--mark-gap）。
-const BRAND_SECTORS: [path: string, opacity: number][] = [
-  ['M13.1 12.9L16.22 11.10A3.6 3.6 0 0 1 16.22 14.70Z', 0.45],
-  ['M13.1 12.9L17.17 15.25A4.7 4.7 0 0 1 13.10 17.60Z', 0.56],
-  ['M13.1 12.9L13.10 18.70A5.8 5.8 0 0 1 8.08 15.80Z', 0.67],
-  ['M13.1 12.9L7.12 16.35A6.9 6.9 0 0 1 7.12 9.45Z', 0.78],
-  ['M13.1 12.9L6.17 8.90A8 8 0 0 1 13.10 4.90Z', 0.89],
-  ['M13.1 12.9L13.10 3.80A9.1 9.1 0 0 1 20.98 8.35Z', 1.0],
-];
-const BrandMark = defineComponent({
-  setup: () => () => h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, [h('svg', { viewBox: '4.5 2.65 17.2 17.2', 'stroke-width': 1, 'stroke-linejoin': 'round' }, BRAND_SECTORS.map(([d, opacity]) => h('path', { d, 'fill-opacity': opacity })))]),
-});
+const dashboardName = 'VDS RealTime Dashboard';
 // 生成中状态标识：一次完整的“呼吸”——吸气时圆点缓缓涨大，稍作停顿；呼气时圆点收回，同时一圈细环从边缘荡开、淡去。
 // 吸短呼长，一个周期约 3.6 秒。颜色为主题蓝实心。配合状态文字上的一道微光。不由 token 更新驱动。
 // 用户明确要求每次生成均自动播放此状态动效；其他减少动态行为保持原有策略。
@@ -2451,9 +2446,7 @@ button { font: inherit; }
 /* ---------- 侧栏 ---------- */
 .sidebar { width: 264px; flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 14px 12px 10px; background: var(--fill-soft); }
 .brand { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 2px 0 6px; }
-.brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-:deep(.brand-mark) { --mark-gap: var(--fill-soft); display: block; flex-shrink: 0; width: 26px; height: 26px; }
-:deep(.brand-mark svg) { display: block; width: 100%; height: 100%; fill: var(--blue); stroke: var(--mark-gap); }
+.brand h1 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-nav { display: grid; gap: 2px; margin-top: 12px; }
 .side-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 13.5px; text-align: left; cursor: pointer; transition: background .12s; }
 .side-row .el-icon { flex-shrink: 0; font-size: 16px; color: var(--muted); }
@@ -2709,8 +2702,36 @@ button.step-row:hover .step-chevron { color: var(--muted); }
 /* ---------- 起始页 ---------- */
 .chat-pane.is-welcome { justify-content: center; padding-bottom: 5vh; }
 .welcome { display: flex; flex-direction: column; align-items: center; padding: 0 40px 28px; text-align: center; animation: rise .45s ease-out both; }
-.welcome :deep(.welcome-mark) { --mark-gap: #fff; width: 56px; height: 56px; }
-.welcome-title { margin: 24px 0 0; font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .5px; color: var(--ink); }
+.welcome-title { width: min(100%, 540px); margin: 0; color: var(--blue); }
+.welcome-title svg { display: block; width: 100%; height: auto; overflow: visible; }
+.welcome-wordmark {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0;
+  stroke-linejoin: round;
+  font: 600 41px var(--el-font-family);
+  letter-spacing: -.9px;
+  animation: vds-wordmark-write 1.65s ease-out both;
+}
+.welcome-wave { width: min(88%, 420px); display: grid; gap: 6px; margin: 10px 0 4px; }
+.welcome-wave-row { display: grid; grid-template-columns: repeat(25, minmax(0, 1fr)); justify-items: center; }
+.welcome-wave-row span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--blue);
+  opacity: .14;
+  animation: vds-welcome-wave 1.35s ease-in-out var(--wave-delay) both;
+}
+@keyframes vds-wordmark-write {
+  0% { fill-opacity: 0; stroke-width: 1; stroke-dasharray: 0 180; }
+  70% { fill-opacity: 0; stroke-width: 1; stroke-dasharray: 180 0; }
+  100% { fill-opacity: 1; stroke-width: 0; stroke-dasharray: 180 0; }
+}
+@keyframes vds-welcome-wave {
+  0%, 100% { opacity: .14; transform: scale(.65); }
+  50% { opacity: .58; transform: scale(1.45); }
+}
 .welcome-tip { margin: 10px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .is-welcome .composer-region { animation: rise .45s ease-out .06s both; }
 .is-welcome .disclaimer { position: absolute; left: 0; right: 0; bottom: 12px; pointer-events: none; }
