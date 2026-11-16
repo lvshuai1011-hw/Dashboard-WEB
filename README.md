@@ -14,11 +14,40 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 
 ## 更新日志
 
+### 2026-11-16
+
+- 拆分问结算助手页面，整理 ZIP 字段偏移、签名、压缩方式与附件解析上限的命名。
+
 ### 2026-11-13
 
 - 移除欢迎页标题下方的说明文字。
 - 起始页改用 **VDS RealTime Dashboard** 文字标题。进入时先绘制字形轮廓，再填成主题蓝，下方的装饰性折线从左向右绘制，终点亮起后停住。
 - 左侧栏显示静态名称 **SeekSettlement**。开启系统“减少动态效果”时，起始页直接显示动画结束后的样式。
+
+## 移植问结算助手
+
+保留现有页面入口 `src/views/ux/aiAgent.vue`，它加载同级 `aiAgent/App.vue`。移植时一起合并 `aiAgent/` 目录及该入口。宿主继续提供 Vue 3.5、Element Plus、ECharts、lodash-es、pdfjs-dist、i18n 语言包和 `~/store` 的登录接口。Site 演示使用模拟传输，真实门户沿用既有 SSE 接口。
+
+下表的行号以拆分前的 GitHub 提交 `4a6021d` 为准。
+
+| 原代码位置 | 新文件或归属 |
+| --- | --- |
+| 模板 1–280 的页面骨架，脚本 281–2427 的组装和生命周期 | `App.vue` |
+| 365–432 的类型和协议常量，以及各处的附件、并发、追问限制 | `types.ts` |
+| 433–554 的记录判断、分帧和 HTTP 传输 | `lib/sse.ts`，记录判断由 `lib/records.ts` 提供并从 SSE 模块导出 |
+| 566–902 的 PDF 资源、附件提取、历史附件恢复和请求正文拼接 | `lib/attachmentReaders.ts` |
+| 310–348、352–364 的自定义图标 | `lib/icons.ts` |
+| 903–1015 的历史与选中会话、1341–1346 的持久化及 1353–1403 的会话操作 | `composables/useConversations.ts`，ID 与历史字段转换在 `lib/identity.ts` |
+| 1882–2098 的流事件与发送流程、1404–1466 的过程推进和正文分流 | `composables/useChatStream.ts`、`useRunningRequests.ts`、`lib/streamEvents.ts`、`lib/messageLayout.ts` |
+| 1016–1032、1157–1172、2111–2124 中的滚动引用、阅读位置、导航和跟随逻辑 | `composables/useScrollFollow.ts` |
+| 模板 5–45、54–70、73–94 | `ChatSidebar.vue`、`ChatHeader.vue`、`WelcomePage.vue` |
+| 模板 96–98 和 213–227、99–212 | `MessageList.vue` 和 `MessageItem.vue` |
+| 模板 116–163、167–192 | `ProcessTimeline.vue` 和 `ChartCard.vue` |
+| 模板 230–263、267–277 | `Composer.vue` 和 `ConfirmDialogs.vue` |
+| 1832–1880、2264–2381 | `ChartView.vue` 和 `Typewriter.vue`，配置和 Markdown 分别放在 `lib/chartOptions.ts` 和 `lib/markdown.ts` |
+| 2428–2821、2823–2832 | `styles/seeksettlement.less` 和 `styles/global.less`。页面样式限定在 `.agent-page` 下，以便跨组件应用 |
+
+附件交互、执行过程、图表下载及界面文案分别归入 `useAttachments.ts`、`useProcessTimeline.ts`、`useChartCards.ts` 和 `useUiCopy.ts`。子组件均位于 `components/`，以类型化 props 和事件连接。
 
 ## 本地部署
 

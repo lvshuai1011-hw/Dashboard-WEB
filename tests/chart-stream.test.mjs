@@ -1,22 +1,24 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
-import { transformSync } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
-// Exercise the component's actual event/layout functions without a browser or backend.
-const source = readFileSync(new URL('../src/views/ux/aiAgent.vue', import.meta.url), 'utf8');
-const names = ['closeProcess', 'addProcess', 'appendTextTurn', 'markFinalTurn', 'bodyTextIds', 'layout', 'handleJsonEvent', 'readFollowUps'];
-const functions = names.map(name => {
-  const match = source.match(new RegExp(`^function ${name}\\([\\s\\S]*?^}`, 'm'));
-  assert.ok(match, `Missing function ${name}`);
-  return match[0];
-}).join('\n');
-const context = vm.createContext({
-  reactive: value => value,
-  isRecord: value => value !== null && typeof value === 'object' && !Array.isArray(value),
+// Exercise the same event and layout modules used by the page.
+const { outputFiles } = await build({
+  stdin: {
+    contents: `export { appendTextTurn, markFinalTurn, handleJsonEvent } from './src/views/ux/aiAgent/lib/streamEvents';
+      export { layout } from './src/views/ux/aiAgent/lib/messageLayout';`,
+    resolveDir: fileURLToPath(new URL('..', import.meta.url)),
+  },
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  write: false,
 });
-vm.runInContext(transformSync(functions, { loader: 'ts', format: 'cjs' }).code, context);
+const module = { exports: {} };
+new Function('module', outputFiles[0].text)(module);
+const context = module.exports;
+
 const message = () => ({ process: [], status: 'answer' });
 const json = (m, value) => context.handleJsonEvent(m, { content: JSON.stringify(value) });
 const chart = m => json(m, { chart_type: 'bar', title: 'Revenue', series: [] });

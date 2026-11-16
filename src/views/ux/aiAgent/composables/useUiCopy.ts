@@ -1,0 +1,17 @@
+import { computed } from "vue";
+import type { Ref } from "vue";
+export function useUiCopy(locale: Ref<string>) {
+  return computed(() => locale.value.toLowerCase().startsWith('zh') ? {
+    tryAsking: '试试这样问', fill: '填入', copy: '复制', back: '返回', related: '你可能还想问', deleteTitle: '删除会话？', deleteBody: (title: string) => `将删除「${title}」及其全部问答，删除后无法恢复。`,
+    searchHistory: '搜索会话', today: '今天', week: '近 7 天', earlier: '更早', more: '更多',
+    done: '已完成', usedTime: (seconds: string) => `用时 ${seconds} 秒`, chart: '图表', data: '数据', dimension: '维度',
+    questions: '本会话的提问', disclaimer: '内容由 AI 生成，数据以系统报表为准', expand: '展开侧栏', collapse: '收起侧栏',
+    steps: { thinking: '思考', skill: '技能', agent: '智能体', tool: '工具' },
+  } : {
+    tryAsking: 'Try asking', fill: 'Use', copy: 'Copy', back: 'Back', related: 'Related questions', deleteTitle: 'Delete chat?', deleteBody: (title: string) => `This will delete “${title}” and all of its messages. This can’t be undone.`,
+    searchHistory: 'Search chats', today: 'Today', week: 'Previous 7 days', earlier: 'Earlier', more: 'More',
+    done: 'Completed', usedTime: (seconds: string) => `${seconds}s`, chart: 'Chart', data: 'Data', dimension: 'Category',
+    questions: 'Questions in this chat', disclaimer: 'AI-generated content. Refer to system reports for official figures.', expand: 'Show sidebar', collapse: 'Hide sidebar',
+    steps: { thinking: 'Thinking', skill: 'Skills', agent: 'Agents', tool: 'Tools' },
+  });
+}
