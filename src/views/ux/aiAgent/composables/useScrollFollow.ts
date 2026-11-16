@@ -1,36 +1,57 @@
-import { computed, nextTick, ref } from "vue";
-import type { Ref } from "vue";
-import type { ScrollbarInstance } from "element-plus";
-import type { ChatMessage } from "../types";
+import { computed, nextTick, ref } from 'vue';
+import type { Ref } from 'vue';
+import type { ScrollbarInstance } from 'element-plus';
+import type { ChatMessage } from '../types';
 
-export function useScrollFollow(options: { activeId: Ref<string>; messages: Ref<ChatMessage[]>; processRoot: Ref<HTMLElement | undefined>; isDisposed: () => boolean }) {
+export function useScrollFollow(options: {
+  activeId: Ref<string>;
+  messages: Ref<ChatMessage[]>;
+  processRoot: Ref<HTMLElement | undefined>;
+  isDisposed: () => boolean;
+}) {
   const { activeId, messages, processRoot } = options;
   const following = ref(true);
   const scrollRef = ref<ScrollbarInstance>();
   let scrollScheduled = false;
   const locatedMessageId = ref('');
   let locatedTimer: ReturnType<typeof setTimeout> | undefined;
-  const questionEntries = computed(() => messages.value.filter(message => message.role === 'user'));
+  const questionEntries = computed(() =>
+    messages.value.filter((message) => message.role === 'user'),
+  );
   const readingPositions = new Map<string, { top: number; following: boolean }>();
   function rememberReadingPosition() {
     const wrap = scrollRef.value?.wrapRef;
-    if (wrap) readingPositions.set(activeId.value, { top: wrap.scrollTop, following: following.value });
+    if (wrap)
+      readingPositions.set(activeId.value, { top: wrap.scrollTop, following: following.value });
   }
   async function jumpToMessage(id: string) {
     following.value = false;
     await nextTick();
-    const el = document.getElementById(`chat-message-${id}`), wrap = scrollRef.value?.wrapRef;
+    const el = document.getElementById(`chat-message-${id}`),
+      wrap = scrollRef.value?.wrapRef;
     if (!el || !wrap || !processRoot.value?.contains(el)) return;
-    scrollRef.value?.setScrollTop(wrap.scrollTop + el.getBoundingClientRect().top - wrap.getBoundingClientRect().top - 18);
-    el.focus({ preventScroll: true }); locatedMessageId.value = id;
-    clearTimeout(locatedTimer); locatedTimer = setTimeout(() => { locatedMessageId.value = ''; }, 2200);
+    scrollRef.value?.setScrollTop(
+      wrap.scrollTop + el.getBoundingClientRect().top - wrap.getBoundingClientRect().top - 18,
+    );
+    el.focus({ preventScroll: true });
+    locatedMessageId.value = id;
+    clearTimeout(locatedTimer);
+    locatedTimer = setTimeout(() => {
+      locatedMessageId.value = '';
+    }, 2200);
   }
   const activeQuestionId = ref('');
   function updateActiveQuestion() {
     const wrap = scrollRef.value?.wrapRef;
     const entries = questionEntries.value;
-    if (!wrap || !entries.length) { activeQuestionId.value = ''; return; }
-    if (wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 8) { activeQuestionId.value = entries[entries.length - 1].id; return; }
+    if (!wrap || !entries.length) {
+      activeQuestionId.value = '';
+      return;
+    }
+    if (wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 8) {
+      activeQuestionId.value = entries[entries.length - 1].id;
+      return;
+    }
     const top = wrap.getBoundingClientRect().top + 96;
     let id = entries[0].id;
     for (const entry of entries) {
@@ -49,12 +70,35 @@ export function useScrollFollow(options: { activeId: Ref<string>; messages: Ref<
     void nextTick(() => {
       scrollScheduled = false;
       const el = scrollRef.value?.wrapRef;
-      if (!options.isDisposed() && following.value && el) scrollRef.value?.setScrollTop(el.scrollHeight);
+      if (!options.isDisposed() && following.value && el)
+        scrollRef.value?.setScrollTop(el.scrollHeight);
     });
   }
-  function jumpToBottom() { following.value = true; scheduleScroll(); }
-  function disposeScroll() { clearTimeout(locatedTimer); }
-  function onMessageScroll() { onScroll(); updateActiveQuestion(); }
+  function jumpToBottom() {
+    following.value = true;
+    scheduleScroll();
+  }
+  function disposeScroll() {
+    clearTimeout(locatedTimer);
+  }
+  function onMessageScroll() {
+    onScroll();
+    updateActiveQuestion();
+  }
 
-  return { following, scrollRef, locatedMessageId, questionEntries, activeQuestionId, readingPositions, rememberReadingPosition, jumpToMessage, updateActiveQuestion, scheduleScroll, jumpToBottom, onMessageScroll, disposeScroll };
+  return {
+    following,
+    scrollRef,
+    locatedMessageId,
+    questionEntries,
+    activeQuestionId,
+    readingPositions,
+    rememberReadingPosition,
+    jumpToMessage,
+    updateActiveQuestion,
+    scheduleScroll,
+    jumpToBottom,
+    onMessageScroll,
+    disposeScroll,
+  };
 }

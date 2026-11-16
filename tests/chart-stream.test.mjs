@@ -21,8 +21,8 @@ const context = module.exports;
 
 const message = () => ({ process: [], status: 'answer' });
 const json = (m, value) => context.handleJsonEvent(m, { content: JSON.stringify(value) });
-const chart = m => json(m, { chart_type: 'bar', title: 'Revenue', series: [] });
-const kinds = items => Array.from(items, item => item.kind);
+const chart = (m) => json(m, { chart_type: 'bar', title: 'Revenue', series: [] });
+const kinds = (items) => Array.from(items, (item) => item.kind);
 
 test('summary streams below the chart even when messageId is reused', () => {
   const m = message();

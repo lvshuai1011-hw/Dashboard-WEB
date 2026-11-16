@@ -1,3 +1,5 @@
-import type { JsonRecord } from "../types";
+import type { JsonRecord } from '../types';
 
-export function isRecord(value: unknown): value is JsonRecord { return typeof value === 'object' && value !== null && !Array.isArray(value); }
+export function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

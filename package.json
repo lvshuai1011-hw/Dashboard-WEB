@@ -5,21 +5,35 @@
   "scripts": {
     "setup": "npm install",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "format": "prettier --write src stub tests scripts vite.config.js index.html tsconfig.json package.json",
+    "format:check": "prettier --check src stub tests scripts vite.config.js index.html tsconfig.json package.json",
+    "package:source": "node scripts/package-source.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "2.3.2",
     "echarts": "5.6.0",
     "element-plus": "2.14.7",
     "lodash-es": "4.18.1",
+    "pdfjs-dist": "6.5.438",
     "pinia": "2.3.1",
     "vue": "3.5.44",
-    "vue-i18n": "9.14.5",
-    "pdfjs-dist": "6.5.438"
+    "vue-i18n": "9.14.5"
   },
   "devDependencies": {
+    "@types/lodash-es": "4.17.12",
+    "@types/node": "22.20.5",
     "@vitejs/plugin-vue": "5.2.4",
+    "esbuild": "0.21.5",
     "less": "4.9.1",
-    "vite": "5.4.21"
+    "prettier": "3.10.1",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vue-tsc": "3.3.14"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

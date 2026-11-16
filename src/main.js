@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css';
 import { createPinia } from 'pinia';
 import i18n from '../stub/i18n';
 import Page from './views/ux/aiAgent.vue';
+document.documentElement.lang = i18n.global.locale.value;
 const app = createApp(Page);
 app.use(ElementPlus);
 app.use(createPinia());

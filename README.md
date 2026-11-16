@@ -16,7 +16,11 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 
 ### 2026-11-16
 
-- 拆分问结算助手页面，整理 ZIP 字段偏移、签名、压缩方式与附件解析上限的命名。
+- 对全仓手写代码逐文件审查并统一可读格式；保留原拆分映射的入口与组件文件名。
+- 分离附件格式解析、历史恢复、编辑、复制反馈；共用消息组件类型，移除过时注释和未用导入。
+- 修复异常图表、横轴顺序、轴索引映射、Markdown 表格边界、请求注册顺序、图表实例清理和关键帧选择器。
+- 添加类型检查、格式检查及回归测试入口；移除过时交付物，改为从提交生成源码包。
+- ZIP 签名、字段偏移、压缩方式、Excel 内置格式和解析上限使用有含义的命名。
 
 ### 2026-11-13
 
@@ -112,7 +116,7 @@ server {
 
 打开页面后：
 
-1. 起始页显示标识、“电信计费数据问答”和三条示例问题；
+1. 起始页显示 “VDS RealTime Dashboard”、装饰折线和三条示例问题，侧栏名称为 “SeekSettlement”；
 2. 点击示例问题，再按 Enter 发送；
 3. 约 1 秒后出现“思考”过程，随后出现结果卡片（图表）、文字答复和三条追问建议。
 
@@ -143,12 +147,26 @@ server {
 
 ## 生产集成
 
-页面文件为 `src/views/ux/aiAgent.vue`。将它集成到原门户；`stub/` 和 `src/demo-transport.js` 仅用于独立预览。PDF 解析依赖 `pdfjs-dist`，版本见 package.json。
+页面入口为 `src/views/ux/aiAgent.vue`，必须连同 `src/views/ux/aiAgent/` 整个目录集成到原门户；`stub/` 和 `src/demo-transport.js` 仅用于独立预览。PDF 解析依赖 `pdfjs-dist`，版本见 package.json。
 
 附件提示支持中英文，悬停显示 `.pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json`。每条问题最多 5 个文件，每个不超过 5 MiB；不支持旧版 DOC/XLS 或图片识别。
 
-## 编译与交付
+## 代码检查与交付
 
-构建命令见上面“本地部署”。`delivery/` 目录下的 `aiAgent-ui-delivery.zip`（组件、交付说明、构建记录和 PDF/PPTX 样例）和说明文档是 2026-11 界面改版之前生成的，内容已落后于当前源码，正式交付前需要重新生成。
+```bash
+npm run typecheck
+npm test
+npm run format:check
+npm run build
+npm run package:source
+```
 
-最新代码已用 `npm run build` 验证可以构建，构建产物用 `vite preview` 跑通了问答、图表和追问建议；本仓库没有配置 ESLint，也没有运行过 Windows PowerShell 脚本。
+`typecheck` 检查 Vue 模板与 TypeScript，并拒绝未使用的变量；`format` 统一排版。
+这些是独立检查：Vite 构建不会代替类型检查。开发工具仅为 devDependencies，不增加页面运行时依赖。
+
+旧的单文件交付 ZIP、旧说明及旧构建日志已移出当前版本，可从 Git 历史查阅。
+`package:source` 从当前 **已提交的 HEAD** 生成 `delivery/aiAgent-source.zip`，包含完整模块、预览工程与文档；执行前请先提交改动。生成包不纳入 Git，避免再次与源码脱节。
+
+当前审查范围与修改依据见 [代码审查记录](docs/code-review-2026-11-16.md)。
+PDF 仅提取文本层；Office 仅支持 OOXML。真实接口、企业语言包和登录态仍需移植方联调。
+本页面按单个应用实例设计；会话和运行请求为模块级共享状态，同一页面不要同时挂载两份 App。
