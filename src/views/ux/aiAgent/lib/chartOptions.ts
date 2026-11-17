@@ -278,9 +278,9 @@ function pieMerge(data: ChartContent, type: 'pie' | 'ring'): Record<string, unkn
               show: true,
               trigger: 'item',
               formatter: summary ?? '-',
-              backgroundColor: 'rgba(50, 50, 50, 0.9)',
-              borderColor: '#333',
-              textStyle: { color: '#fff' },
+              backgroundColor: '#f8fafc',
+              borderColor: '#dfe5ee',
+              textStyle: { color: '#333a47' },
             },
           },
         ],
@@ -390,7 +390,7 @@ export function polishChartOption(option: Record<string, unknown>, type: ChartTy
     textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2329' },
   });
   option.tooltip = merge(cloneDeep(option.tooltip ?? {}), {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
     borderColor: '#e6e9ef',
     borderWidth: 1,
     padding: [9, 13],

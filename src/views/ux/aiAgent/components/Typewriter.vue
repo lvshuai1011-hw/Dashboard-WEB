@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="typewriter"
-    :class="{ active: props.active }"
-  >
+  <div class="typewriter" :class="{ active: props.active }">
     <div
       ref="root"
       class="markdown-body"

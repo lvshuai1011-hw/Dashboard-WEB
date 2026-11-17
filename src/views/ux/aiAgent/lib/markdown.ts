@@ -150,7 +150,7 @@ export function renderMarkdown(source: string, t: ComposerTranslation, depth = 0
       const pre = `<pre><code>${highlightCode(code.join('\n'), fence[2])}</code></pre>`;
       result.push(
         `<div class="code-block"><div class="code-toolbar"><span>${escapeHtml(fence[2].trim() || t('AIAGENT.MARKDOWN.CODE'))}</span>` +
-          `<button type="button" data-copy-code title="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}" aria-label="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}">${COPY_ICON}${CHECK_ICON}</button></div>` +
+          `<button type="button" data-copy-code aria-label="${escapeHtml(t('AIAGENT.BUTTON.COPY_CODE'))}">${COPY_ICON}${CHECK_ICON}</button></div>` +
           (code.length > 14
             ? `<details class="code-fold"><summary>${escapeHtml(t('AIAGENT.MARKDOWN.EXPAND_CODE', { lines: code.length }))}</summary>${pre}</details>`
             : pre) +

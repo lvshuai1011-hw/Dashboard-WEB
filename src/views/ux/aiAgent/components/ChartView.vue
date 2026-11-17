@@ -1,15 +1,8 @@
 <template>
-  <div
-    v-if="isEmpty"
-    class="chart-container is-empty"
-  >
+  <div v-if="isEmpty" class="chart-container is-empty">
     <p class="chart-empty">{{ t('AIAGENT.CHART.NO_DATA') }}</p>
   </div>
-  <div
-    v-else
-    ref="root"
-    class="chart-container"
-  />
+  <div v-else ref="root" class="chart-container" />
 </template>
 
 <script setup lang="ts">

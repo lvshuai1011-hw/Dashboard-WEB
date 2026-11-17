@@ -1,67 +1,28 @@
 <template>
   <div class="chat-scroll-area">
     <el-scrollbar
-      :ref="(value) => registerScrollbar(value)"
+      :ref="(value) => emit('registerScrollbar', value)"
       class="message-scroll"
-      @scroll="onMessageScroll"
+      @scroll="emit('onMessageScroll')"
     >
-      <div
-        class="message-list"
-        role="log"
-        aria-live="off"
-        :aria-label="t('AIAGENT.A11Y.MESSAGES')"
-      >
+      <div class="message-list" role="log" aria-live="off" :aria-label="t('AIAGENT.A11Y.MESSAGES')">
         <MessageItem
           v-for="message in messages"
           :key="message.id"
-          :locatedMessageId="locatedMessageId"
-          :copiedMessageId="copiedMessageId"
-          :streaming="streaming"
-          :attachmentReading="attachmentReading"
-          :reducedMotion="reducedMotion"
-          :now="now"
+          v-bind="messageProps"
           :message="message"
-          :feedback="feedback"
-          :uiCopy="uiCopy"
-          :formatTime="formatTime"
-          :layout="layout"
-          :isActive="isActive"
-          :justFinished="justFinished"
-          :keyMarkPart="keyMarkPart"
-          :bodyEntries="bodyEntries"
-          :answerText="answerText"
-          :canRegenerate="canRegenerate"
-          :showFollowUps="showFollowUps"
-          :traceOpen="traceOpen"
-          :liveLabel="liveLabel"
-          :liveStepName="liveStepName"
-          :summaryLabel="summaryLabel"
-          :stepCounts="stepCounts"
-          :stepExpandable="stepExpandable"
-          :stepGroup="stepGroup"
-          :stepOpen="stepOpen"
-          :stepIcon="stepIcon"
-          :stepName="stepName"
-          :stepPreview="stepPreview"
-          :stepTime="stepTime"
-          :toolFacts="toolFacts"
-          :prettyJson="prettyJson"
-          :chartMode="chartMode"
-          :chartTable="chartTable"
-          :numericColumn="numericColumn"
-          :formatCell="formatCell"
-          @scheduleScroll="scheduleScroll"
-          @copyQuestion="copyQuestion"
-          @copyAnswer="copyAnswer"
-          @editQuestion="editQuestion"
-          @regenerate="regenerate"
-          @setFeedback="setFeedback"
-          @askFollowUp="askFollowUp"
-          @copyCode="copyCode"
-          @previewAttachment="previewAttachment"
-          @setChartMode="setChartMode"
-          @downloadCurrent="downloadCurrent"
-          @registerChart="registerChart"
+          @scheduleScroll="emit('scheduleScroll')"
+          @copyQuestion="(message) => emit('copyQuestion', message)"
+          @copyAnswer="(message) => emit('copyAnswer', message)"
+          @editQuestion="(message) => emit('editQuestion', message)"
+          @regenerate="(message) => emit('regenerate', message)"
+          @setFeedback="(message, value) => emit('setFeedback', message, value)"
+          @askFollowUp="(question) => emit('askFollowUp', question)"
+          @copyCode="(event) => emit('copyCode', event)"
+          @previewAttachment="(file) => emit('previewAttachment', file)"
+          @setChartMode="(message, item, mode) => emit('setChartMode', message, item, mode)"
+          @downloadCurrent="(message, item) => emit('downloadCurrent', message, item)"
+          @registerChart="(message, item, chart) => emit('registerChart', message, item, chart)"
         />
       </div>
     </el-scrollbar>
@@ -73,10 +34,7 @@
       tabindex="0"
       :aria-label="uiCopy.questions"
     >
-      <div
-        class="nav-rail"
-        aria-hidden="true"
-      >
+      <div class="nav-rail" aria-hidden="true">
         <i
           v-for="entry in questionEntries"
           :key="entry.id"
@@ -90,28 +48,30 @@
           :key="entry.id"
           type="button"
           :class="{ active: entry.id === activeQuestionId }"
-          @click="jumpToMessage(entry.id)"
+          @click="emit('jumpToMessage', entry.id)"
         >
-          <i aria-hidden="true" /><span>{{ entry.content }}</span
-          ><time>{{ formatTime(entry.createdAt) }}</time>
+          <i aria-hidden="true" />
+          <span>{{ entry.content }}</span>
+          <time>{{ formatTime(entry.createdAt) }}</time>
         </button>
       </div>
     </nav>
-    <el-tooltip
-      v-if="!following"
-      :content="t('AIAGENT.BUTTON.BOTTOM')"
-      ><button
+    <AppTooltip v-if="!following" :content="t('AIAGENT.BUTTON.BOTTOM')">
+      <button
         class="to-bottom"
         type="button"
         :aria-label="t('AIAGENT.BUTTON.BOTTOM')"
-        @click="jumpToBottom"
+        @click="emit('jumpToBottom')"
       >
-        <el-icon><ArrowDown /></el-icon></button
-    ></el-tooltip>
+        <el-icon><ArrowDown /></el-icon>
+      </button>
+    </AppTooltip>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import AppTooltip from './AppTooltip.vue';
 import { ArrowDown } from '@element-plus/icons-vue';
 import MessageItem from './MessageItem.vue';
 import { useI18n } from 'vue-i18n';
@@ -124,7 +84,12 @@ interface MessageListProps extends Omit<MessageItemProps, 'message'> {
   messages: ChatMessage[];
   questionEntries: ChatMessage[];
 }
-defineProps<MessageListProps>();
+const props = defineProps<MessageListProps>();
+// Keep list-only fields out of the message DOM; forward the shared typed contract together.
+const messageProps = computed(() => {
+  const { activeQuestionId, following, messages, questionEntries, ...shared } = props;
+  return shared;
+});
 const emit = defineEmits<{
   scheduleScroll: [];
   onMessageScroll: [];
@@ -143,25 +108,4 @@ const emit = defineEmits<{
   registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
   registerScrollbar: [value: unknown];
 }>();
-const scheduleScroll = (...args: []) => emit('scheduleScroll', ...args);
-const onMessageScroll = (...args: []) => emit('onMessageScroll', ...args);
-const jumpToBottom = (...args: []) => emit('jumpToBottom', ...args);
-const copyQuestion = (...args: [message: ChatMessage]) => emit('copyQuestion', ...args);
-const copyAnswer = (...args: [message: ChatMessage]) => emit('copyAnswer', ...args);
-const editQuestion = (...args: [message: ChatMessage]) => emit('editQuestion', ...args);
-const regenerate = (...args: [message: ChatMessage]) => emit('regenerate', ...args);
-const setFeedback = (...args: [message: ChatMessage, value: 'up' | 'down']) =>
-  emit('setFeedback', ...args);
-const askFollowUp = (...args: [question: string]) => emit('askFollowUp', ...args);
-const jumpToMessage = (...args: [id: string]) => emit('jumpToMessage', ...args);
-const copyCode = (...args: [event: MouseEvent]) => emit('copyCode', ...args);
-const previewAttachment = (...args: [file: TextAttachment | null]) =>
-  emit('previewAttachment', ...args);
-const setChartMode = (...args: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data']) =>
-  emit('setChartMode', ...args);
-const downloadCurrent = (...args: [message: ChatMessage, item: ProcessItem]) =>
-  emit('downloadCurrent', ...args);
-const registerChart = (...args: [message: ChatMessage, item: ProcessItem, chart: unknown]) =>
-  emit('registerChart', ...args);
-const registerScrollbar = (...args: [value: unknown]) => emit('registerScrollbar', ...args);
 </script>

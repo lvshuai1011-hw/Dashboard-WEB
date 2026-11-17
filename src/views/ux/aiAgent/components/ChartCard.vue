@@ -12,21 +12,23 @@
           role="tab"
           :aria-selected="chartMode(message, item) === 'chart'"
           :class="{ active: chartMode(message, item) === 'chart' }"
-          @click="setChartMode(message, item, 'chart')"
+          @click="emit('setChartMode', message, item, 'chart')"
         >
-          <el-icon><ChartLineIcon /></el-icon>{{ uiCopy.chart }}
+          <el-icon><ChartLineIcon /></el-icon>
+          {{ uiCopy.chart }}
         </button>
         <button
           type="button"
           role="tab"
           :aria-selected="chartMode(message, item) === 'data'"
           :class="{ active: chartMode(message, item) === 'data' }"
-          @click="setChartMode(message, item, 'data')"
+          @click="emit('setChartMode', message, item, 'data')"
         >
-          <el-icon><TableIcon /></el-icon>{{ uiCopy.data }}
+          <el-icon><TableIcon /></el-icon>
+          {{ uiCopy.data }}
         </button>
       </div>
-      <el-tooltip
+      <AppTooltip
         v-if="canDownloadChart(item)"
         :content="
           t(
@@ -46,17 +48,14 @@
                 : 'AIAGENT.CHART.DOWNLOAD',
             )
           "
-          @click.stop="downloadCurrent(message, item)"
+          @click.stop="emit('downloadCurrent', message, item)"
         >
           <el-icon><Download /></el-icon>
         </button>
-      </el-tooltip>
+      </AppTooltip>
     </div>
     <div class="result-body">
-      <p
-        v-if="item.chart?.summary"
-        class="result-summary"
-      >
+      <p v-if="item.chart?.summary" class="result-summary">
         {{ item.chart.summary }}
       </p>
       <template v-if="chartHasData(item.chart)">
@@ -65,16 +64,13 @@
           v-show="chartMode(message, item) === 'chart'"
           :ref="
             (el) => {
-              registerChart(message, item, el);
+              emit('registerChart', message, item, el);
             }
           "
           :content="item.chart"
           :reduced-motion="reducedMotion"
         />
-        <div
-          v-if="chartMode(message, item) === 'data' && table"
-          class="data-table-scroll"
-        >
+        <div v-if="chartMode(message, item) === 'data' && table" class="data-table-scroll">
           <table class="data-table">
             <thead>
               <tr>
@@ -88,15 +84,8 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(row, ri) in table.rows"
-                :key="ri"
-              >
-                <td
-                  v-for="(cell, ci) in row"
-                  :key="ci"
-                  :class="{ num: typeof cell === 'number' }"
-                >
+              <tr v-for="(row, ri) in table.rows" :key="ri">
+                <td v-for="(cell, ci) in row" :key="ci" :class="{ num: typeof cell === 'number' }">
                   {{ formatCell(cell) }}
                 </td>
               </tr>
@@ -104,17 +93,11 @@
           </table>
         </div>
       </template>
-      <p
-        v-else
-        class="result-empty"
-      >
+      <p v-else class="result-empty">
         {{ t('AIAGENT.CHART.NO_DATA') }}
       </p>
     </div>
-    <div
-      v-if="item.chart?.total != null"
-      class="result-foot"
-    >
+    <div v-if="item.chart?.total != null" class="result-foot">
       {{
         t('AIAGENT.CHART.RECORDS', {
           total: item.chart.total,
@@ -126,6 +109,7 @@
 </template>
 
 <script setup lang="ts">
+import AppTooltip from './AppTooltip.vue';
 import { computed } from 'vue';
 import { Download } from '@element-plus/icons-vue';
 import { ChartLineIcon, TableIcon } from '../lib/icons';
@@ -152,12 +136,7 @@ const emit = defineEmits<{
   downloadCurrent: [message: ChatMessage, item: ProcessItem];
   registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
 }>();
-const setChartMode = (...args: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data']) =>
-  emit('setChartMode', ...args);
-const downloadCurrent = (...args: [message: ChatMessage, item: ProcessItem]) =>
-  emit('downloadCurrent', ...args);
-const registerChart = (...args: [message: ChatMessage, item: ProcessItem, chart: unknown]) =>
-  emit('registerChart', ...args);
+
 const table = computed(() => props.chartTable(props.item.chart));
 const numericColumns = computed(
   () => table.value?.headers.map((_, index) => props.numericColumn(table.value!, index)) ?? [],

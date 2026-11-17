@@ -7,50 +7,45 @@
   >
     <!-- 用户提问 -->
     <template v-if="message.role === 'user'">
-      <div
-        class="question"
-        :title="formatTime(message.createdAt)"
-      >
-        <p class="question-text">{{ message.content }}</p>
-        <div
-          v-if="message.attachments?.length"
-          class="sent-attachments"
+      <AppTooltip :content="formatTime(message.createdAt)">
+        <div class="question">
+          <p class="question-text">{{ message.content }}</p>
+          <div v-if="message.attachments?.length" class="sent-attachments">
+            <AppTooltip :content="file.name" v-for="file in message.attachments" :key="file.id">
+              <button type="button" class="file-chip" @click="emit('previewAttachment', file)">
+                <el-icon><Document /></el-icon>
+                <span>{{ file.name }}</span>
+              </button>
+            </AppTooltip>
+          </div>
+        </div>
+      </AppTooltip>
+      <div class="question-actions">
+        <AppTooltip
+          :content="copiedMessageId === message.id ? t('AIAGENT.COPY.SUCCESS') : uiCopy.copy"
         >
           <button
-            v-for="file in message.attachments"
-            :key="file.id"
-            type="button"
-            class="file-chip"
-            :title="file.name"
-            @click="previewAttachment(file)"
-          >
-            <el-icon><Document /></el-icon><span>{{ file.name }}</span>
-          </button>
-        </div>
-      </div>
-      <div class="question-actions">
-        <el-tooltip
-          :content="copiedMessageId === message.id ? t('AIAGENT.COPY.SUCCESS') : uiCopy.copy"
-          ><button
             type="button"
             class="icon-button small"
             :aria-label="uiCopy.copy"
-            @click="copyQuestion(message)"
+            @click="emit('copyQuestion', message)"
           >
-            <el-icon
-              ><component :is="copiedMessageId === message.id ? Check : CopyDocument"
-            /></el-icon></button
-        ></el-tooltip>
-        <el-tooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')"
-          ><button
+            <el-icon>
+              <component :is="copiedMessageId === message.id ? Check : CopyDocument" />
+            </el-icon>
+          </button>
+        </AppTooltip>
+        <AppTooltip :content="t('AIAGENT.BUTTON.EDIT_QUESTION')">
+          <button
             type="button"
             class="icon-button small"
             :disabled="streaming || attachmentReading"
             :aria-label="t('AIAGENT.BUTTON.EDIT_QUESTION')"
-            @click="editQuestion(message)"
+            @click="emit('editQuestion', message)"
           >
-            <el-icon><EditPen /></el-icon></button
-        ></el-tooltip>
+            <el-icon><EditPen /></el-icon>
+          </button>
+        </AppTooltip>
       </div>
     </template>
 
@@ -76,24 +71,20 @@
         :stepTime="stepTime"
         :toolFacts="toolFacts"
         :prettyJson="prettyJson"
-        @scheduleScroll="scheduleScroll"
-        @copyCode="copyCode"
+        @scheduleScroll="emit('scheduleScroll')"
+        @copyCode="(event) => emit('copyCode', event)"
       />
 
-      <div
-        v-for="item in layout(message).body"
-        :key="`body-${item.id}`"
-        class="answer-part"
-      >
+      <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
         <Typewriter
           v-if="item.kind === 'text'"
           :content="item.text"
           :active="isActive(message)"
           :highlight="item.id === keyMarkPart(message)"
           :sweep="justFinished(message)"
-          @progress="scheduleScroll"
+          @progress="emit('scheduleScroll')"
           :reduced-motion="reducedMotion"
-          @copy-code="copyCode"
+          @copy-code="(event) => emit('copyCode', event)"
         />
         <ChartCard
           v-else-if="item.kind === 'chart'"
@@ -105,88 +96,78 @@
           :chartTable="chartTable"
           :numericColumn="numericColumn"
           :formatCell="formatCell"
-          @setChartMode="setChartMode"
-          @downloadCurrent="downloadCurrent"
-          @registerChart="registerChart"
+          @setChartMode="(message, item, mode) => emit('setChartMode', message, item, mode)"
+          @downloadCurrent="(message, item) => emit('downloadCurrent', message, item)"
+          @registerChart="(message, item, chart) => emit('registerChart', message, item, chart)"
         />
       </div>
-      <p
-        v-if="message.status === 'completed' && !bodyEntries(message).length"
-        class="note"
-      >
+      <p v-if="message.status === 'completed' && !bodyEntries(message).length" class="note">
         {{ t('AIAGENT.STATUS.NO_ANSWER') }}
       </p>
-      <p
-        v-if="message.status === 'stopped'"
-        class="note"
-      >
+      <p v-if="message.status === 'stopped'" class="note">
         {{ t('AIAGENT.STATUS.STOPPED_NOTE') }}
       </p>
-      <div
-        v-if="message.errorKey"
-        class="error-card"
-        role="alert"
-      >
+      <div v-if="message.errorKey" class="error-card" role="alert">
         <el-icon><Warning /></el-icon>
         <div>
           <strong>{{ t(message.errorKey) }}</strong>
           <p v-if="message.errorDetail">{{ message.errorDetail }}</p>
         </div>
       </div>
-      <div
-        v-if="!isActive(message)"
-        class="answer-actions"
-      >
-        <el-tooltip
+      <div v-if="!isActive(message)" class="answer-actions">
+        <AppTooltip
           :content="
             t(copiedMessageId === message.id ? 'AIAGENT.COPY.SUCCESS' : 'AIAGENT.BUTTON.COPY')
           "
-          ><button
+        >
+          <button
             type="button"
             class="icon-button small"
             :disabled="!answerText(message)"
             :aria-label="t('AIAGENT.BUTTON.COPY')"
-            @click="copyAnswer(message)"
+            @click="emit('copyAnswer', message)"
           >
-            <el-icon
-              ><component :is="copiedMessageId === message.id ? Check : CopyDocument"
-            /></el-icon></button
-        ></el-tooltip>
+            <el-icon>
+              <component :is="copiedMessageId === message.id ? Check : CopyDocument" />
+            </el-icon>
+          </button>
+        </AppTooltip>
         <!-- 反馈仅保存在本机，不声称已提交服务端；复用 YES / NOT 键。 -->
-        <el-tooltip :content="t('CM.COMMON.YES')"
-          ><button
+        <AppTooltip :content="t('CM.COMMON.YES')">
+          <button
             type="button"
             class="icon-button small"
             :class="{ selected: feedback.get(message.id) === 'up' }"
             :aria-label="t('CM.COMMON.YES')"
             :aria-pressed="feedback.get(message.id) === 'up'"
-            @click="setFeedback(message, 'up')"
+            @click="emit('setFeedback', message, 'up')"
           >
-            <FeedbackIcon /></button
-        ></el-tooltip>
-        <el-tooltip :content="t('CM.COMMON.NOT')"
-          ><button
+            <FeedbackIcon />
+          </button>
+        </AppTooltip>
+        <AppTooltip :content="t('CM.COMMON.NOT')">
+          <button
             type="button"
             class="icon-button small"
             :class="{ selected: feedback.get(message.id) === 'down' }"
             :aria-label="t('CM.COMMON.NOT')"
             :aria-pressed="feedback.get(message.id) === 'down'"
-            @click="setFeedback(message, 'down')"
+            @click="emit('setFeedback', message, 'down')"
           >
-            <FeedbackIcon down /></button
-        ></el-tooltip>
-        <el-tooltip
-          v-if="canRegenerate(message)"
-          :content="t('AIAGENT.BUTTON.REGENERATE')"
-          ><button
+            <FeedbackIcon down />
+          </button>
+        </AppTooltip>
+        <AppTooltip v-if="canRegenerate(message)" :content="t('AIAGENT.BUTTON.REGENERATE')">
+          <button
             type="button"
             class="icon-button small"
             :disabled="streaming"
             :aria-label="t('AIAGENT.BUTTON.REGENERATE')"
-            @click="regenerate(message)"
+            @click="emit('regenerate', message)"
           >
-            <el-icon><RefreshRight /></el-icon></button
-        ></el-tooltip>
+            <el-icon><RefreshRight /></el-icon>
+          </button>
+        </AppTooltip>
       </div>
       <!-- 追问建议：仅在最新一条已完成的答复下展示，点击直接提问。 -->
       <div
@@ -195,10 +176,7 @@
         role="group"
         :aria-label="uiCopy.related"
       >
-        <p
-          class="follow-label"
-          aria-hidden="true"
-        >
+        <p class="follow-label" aria-hidden="true">
           {{ uiCopy.related }}
         </p>
         <button
@@ -207,12 +185,10 @@
           type="button"
           class="follow-up"
           :style="{ '--i': index }"
-          @click="askFollowUp(question)"
+          @click="emit('askFollowUp', question)"
         >
-          <span>{{ question }}</span><ArrowRightIcon
-            class="follow-icon"
-            aria-hidden="true"
-          />
+          <span>{{ question }}</span>
+          <ArrowRightIcon class="follow-icon" aria-hidden="true" />
         </button>
       </div>
     </template>
@@ -220,6 +196,7 @@
 </template>
 
 <script setup lang="ts">
+import AppTooltip from './AppTooltip.vue';
 import {
   Check,
   CopyDocument,
@@ -251,21 +228,4 @@ const emit = defineEmits<{
   downloadCurrent: [message: ChatMessage, item: ProcessItem];
   registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
 }>();
-const scheduleScroll = (...args: []) => emit('scheduleScroll', ...args);
-const copyQuestion = (...args: [message: ChatMessage]) => emit('copyQuestion', ...args);
-const copyAnswer = (...args: [message: ChatMessage]) => emit('copyAnswer', ...args);
-const editQuestion = (...args: [message: ChatMessage]) => emit('editQuestion', ...args);
-const regenerate = (...args: [message: ChatMessage]) => emit('regenerate', ...args);
-const setFeedback = (...args: [message: ChatMessage, value: 'up' | 'down']) =>
-  emit('setFeedback', ...args);
-const askFollowUp = (...args: [question: string]) => emit('askFollowUp', ...args);
-const copyCode = (...args: [event: MouseEvent]) => emit('copyCode', ...args);
-const previewAttachment = (...args: [file: TextAttachment | null]) =>
-  emit('previewAttachment', ...args);
-const setChartMode = (...args: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data']) =>
-  emit('setChartMode', ...args);
-const downloadCurrent = (...args: [message: ChatMessage, item: ProcessItem]) =>
-  emit('downloadCurrent', ...args);
-const registerChart = (...args: [message: ChatMessage, item: ProcessItem, chart: unknown]) =>
-  emit('registerChart', ...args);
 </script>

@@ -1,18 +1,9 @@
 .agent-menu.el-dropdown__popper {
   --el-dropdown-menuItem-hover-fill: #f1f3f7;
   --el-dropdown-menuItem-hover-color: #1d2330;
-  border: 1px solid #ebeef3;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(23, 32, 56, 0.14);
-}
-.agent-menu.el-dropdown__popper .el-popper__arrow {
-  display: none;
-}
-.agent-menu .el-dropdown-menu {
-  padding: 5px;
   border-radius: 12px;
 }
-.agent-menu .el-dropdown-menu__item {
+.agent-menu.el-dropdown__popper .el-popper__arrow { display: none; }.agent-menu .el-dropdown-menu { padding: 5px; background: #f8fafc; border-radius: 12px; }.agent-menu .el-dropdown-menu__item {
   min-width: 148px;
   height: 34px;
   padding: 0 10px;
@@ -20,17 +11,41 @@
   font-size: 13.5px;
   color: #333a47;
 }
-.agent-menu .el-dropdown-menu__item .el-icon {
-  margin-right: 8px;
-  font-size: 15px;
+.agent-menu .el-dropdown-menu__item .el-icon { margin-right: 8px; font-size: 15px; }.agent-menu .el-dropdown-menu__item.danger { color: #f54a45; }.agent-menu .el-dropdown-menu__item.danger:not(.is-disabled):hover { background: #fff1f0; color: #f54a45; }.agent-menu .el-dropdown-menu__item--divided { margin-top: 4px; }
+/* Shared light surface for teleported hints; never rely on the portal's default dark theme. */
+.agent-tooltip.el-popper,
+.agent-menu.el-dropdown__popper {
+  background: #f8fafc;
+  border: 1px solid #dfe5ee;
+  color: #333a47;
+  box-shadow: 0 6px 20px rgba(23, 32, 56, 0.1);
 }
-.agent-menu .el-dropdown-menu__item.danger {
-  color: #f54a45;
+.agent-tooltip.el-popper {
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
-.agent-menu .el-dropdown-menu__item.danger:not(.is-disabled):hover {
-  background: #fff1f0;
-  color: #f54a45;
+.agent-tooltip.el-popper .el-popper__arrow::before { background: #f8fafc; border-color: #dfe5ee; }.agent-tooltip .tooltip-text { max-width: 320px; }/* Markdown is sanitized HTML rather than Vue templates, so its copy hint uses CSS. */
+.agent-page .code-toolbar button { position: relative; }.agent-page .code-toolbar button::after {
+  content: attr(aria-label);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 2;
+  padding: 5px 9px;
+  border: 1px solid #dfe5ee;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #333a47;
+  box-shadow: 0 4px 12px rgba(23, 32, 56, 0.1);
+  font: 12px/1.5 sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
-.agent-menu .el-dropdown-menu__item--divided {
-  margin-top: 4px;
-}
+.agent-page .code-toolbar button:hover::after,
+.agent-page .code-toolbar button:focus-visible::after { opacity: 1; }

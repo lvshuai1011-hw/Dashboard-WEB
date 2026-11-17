@@ -44,19 +44,12 @@
         @dragleave="onAttachmentDragLeave"
         @drop="onAttachmentDrop"
       >
-        <div
-          v-if="attachmentDragDepth"
-          class="attachment-drop"
-          aria-hidden="true"
-        >
-          <el-icon><Paperclip /></el-icon><strong>{{ attachmentCopy.add }}</strong
-          ><span>{{ attachmentHint }}</span>
+        <div v-if="attachmentDragDepth" class="attachment-drop" aria-hidden="true">
+          <el-icon><Paperclip /></el-icon>
+          <strong>{{ attachmentCopy.add }}</strong>
+          <span>{{ attachmentHint }}</span>
         </div>
-        <el-tooltip
-          v-if="!sidebarOpen"
-          :content="uiCopy.expand"
-          placement="right"
-        >
+        <AppTooltip v-if="!sidebarOpen" :content="uiCopy.expand" placement="right">
           <button
             class="icon-button sidebar-open"
             type="button"
@@ -66,7 +59,7 @@
           >
             <el-icon><PanelIcon /></el-icon>
           </button>
-        </el-tooltip>
+        </AppTooltip>
 
         <!-- 顶栏：会话标题即菜单（收藏 / 重命名 / 删除） -->
         <ChatHeader
@@ -171,26 +164,17 @@
       @previewAttachment="previewAttachment"
       @setPendingDelete="setPendingDelete"
     />
-    <p
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-    >
+    <p class="sr-only" role="status" aria-live="polite">
       {{ t(streaming ? 'AIAGENT.A11Y.GENERATING' : 'AIAGENT.A11Y.READY') }}
     </p>
   </section>
 </template>
 
 <script setup lang="ts">
+import AppTooltip from './components/AppTooltip.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  ElIcon,
-  ElTooltip,
-  ElMessage,
-  type InputInstance,
-  type ScrollbarInstance,
-} from 'element-plus';
+import { ElIcon, ElMessage, type InputInstance, type ScrollbarInstance } from 'element-plus';
 import { Paperclip } from '@element-plus/icons-vue';
 import { PanelIcon } from './lib/icons';
 import { dashboardName } from './types';

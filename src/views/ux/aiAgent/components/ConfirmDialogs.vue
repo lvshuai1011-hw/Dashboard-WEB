@@ -8,29 +8,21 @@
     class="agent-confirm"
     @update:model-value="
       (value) => {
-        if (!value) setPendingDelete(null);
+        if (!value) emit('setPendingDelete', null);
       }
     "
   >
-    <template #header
-      ><h3 class="confirm-title">{{ uiCopy.deleteTitle }}</h3></template
-    >
+    <template #header>
+      <h3 class="confirm-title">{{ uiCopy.deleteTitle }}</h3>
+    </template>
     <p class="confirm-body">
       {{ uiCopy.deleteBody(pendingDelete?.title || t('AIAGENT.HISTORY.UNTITLED')) }}
     </p>
     <template #footer>
-      <button
-        type="button"
-        class="dialog-button"
-        @click="setPendingDelete(null)"
-      >
+      <button type="button" class="dialog-button" @click="emit('setPendingDelete', null)">
         {{ t('AIAGENT.BUTTON.CANCEL') }}
       </button>
-      <button
-        type="button"
-        class="dialog-button danger"
-        @click="confirmDelete"
-      >
+      <button type="button" class="dialog-button danger" @click="emit('confirmDelete')">
         {{ t('AIAGENT.HISTORY.DELETE') }}
       </button>
     </template>
@@ -43,7 +35,7 @@
     class="agent-preview"
     @update:model-value="
       (value) => {
-        if (!value) previewAttachment(null);
+        if (!value) emit('previewAttachment', null);
       }
     "
   >
@@ -66,9 +58,4 @@ const emit = defineEmits<{
   previewAttachment: [file: TextAttachment | null];
   setPendingDelete: [chat: Conversation | null];
 }>();
-const confirmDelete = (...args: []) => emit('confirmDelete', ...args);
-const previewAttachment = (...args: [file: TextAttachment | null]) =>
-  emit('previewAttachment', ...args);
-const setPendingDelete = (...args: [chat: Conversation | null]) =>
-  emit('setPendingDelete', ...args);
 </script>
