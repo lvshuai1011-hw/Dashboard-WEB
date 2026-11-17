@@ -10,9 +10,9 @@
         <button
           type="button"
           role="tab"
-          :aria-selected="chartMode(message, item) === 'chart'"
-          :class="{ active: chartMode(message, item) === 'chart' }"
-          @click="emit('setChartMode', message, item, 'chart')"
+          :aria-selected="charts.chartMode(message, item) === 'chart'"
+          :class="{ active: charts.chartMode(message, item) === 'chart' }"
+          @click="charts.setChartMode(message, item, 'chart')"
         >
           <el-icon><ChartLineIcon /></el-icon>
           {{ uiCopy.chart }}
@@ -20,9 +20,9 @@
         <button
           type="button"
           role="tab"
-          :aria-selected="chartMode(message, item) === 'data'"
-          :class="{ active: chartMode(message, item) === 'data' }"
-          @click="emit('setChartMode', message, item, 'data')"
+          :aria-selected="charts.chartMode(message, item) === 'data'"
+          :class="{ active: charts.chartMode(message, item) === 'data' }"
+          @click="charts.setChartMode(message, item, 'data')"
         >
           <el-icon><TableIcon /></el-icon>
           {{ uiCopy.data }}
@@ -32,7 +32,7 @@
         v-if="canDownloadChart(item)"
         :content="
           t(
-            chartMode(message, item) === 'data'
+            charts.chartMode(message, item) === 'data'
               ? 'AIAGENT.CHART.DOWNLOAD_TABLE'
               : 'AIAGENT.CHART.DOWNLOAD',
           )
@@ -43,12 +43,12 @@
           type="button"
           :aria-label="
             t(
-              chartMode(message, item) === 'data'
+              charts.chartMode(message, item) === 'data'
                 ? 'AIAGENT.CHART.DOWNLOAD_TABLE'
                 : 'AIAGENT.CHART.DOWNLOAD',
             )
           "
-          @click.stop="emit('downloadCurrent', message, item)"
+          @click.stop="charts.downloadCurrent(message, item)"
         >
           <el-icon><Download /></el-icon>
         </button>
@@ -61,16 +61,16 @@
       <template v-if="chartHasData(item.chart)">
         <ChartView
           v-if="item.chart?.chart_type !== 'table'"
-          v-show="chartMode(message, item) === 'chart'"
+          v-show="charts.chartMode(message, item) === 'chart'"
           :ref="
             (el) => {
-              emit('registerChart', message, item, el);
+              charts.registerChart(message, item, el);
             }
           "
           :content="item.chart"
           :reduced-motion="reducedMotion"
         />
-        <div v-if="chartMode(message, item) === 'data' && table" class="data-table-scroll">
+        <div v-if="charts.chartMode(message, item) === 'data' && table" class="data-table-scroll">
           <table class="data-table">
             <thead>
               <tr>
@@ -86,7 +86,7 @@
             <tbody>
               <tr v-for="(row, ri) in table.rows" :key="ri">
                 <td v-for="(cell, ci) in row" :key="ci" :class="{ num: typeof cell === 'number' }">
-                  {{ formatCell(cell) }}
+                  {{ charts.formatCell(cell) }}
                 </td>
               </tr>
             </tbody>
@@ -117,29 +117,21 @@ import { chartHasData } from '../lib/chartOptions';
 import ChartView from './ChartView.vue';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
-import type { ChatMessage, ChartContent, ProcessItem } from '../types';
+import type { ChatMessage, ProcessItem } from '../types';
+import type { useChartCards } from '../composables/useChartCards';
 import type { useUiCopy } from '../composables/useUiCopy';
 const props = defineProps<{
   reducedMotion: boolean;
   message: ChatMessage;
   item: ProcessItem;
   uiCopy: ReturnType<typeof useUiCopy>['value'];
-  chartMode: (message: ChatMessage, item: ProcessItem) => string;
-  chartTable: (
-    chart?: ChartContent,
-  ) => { headers: string[]; rows: (string | number)[][] } | undefined;
-  numericColumn: (table: { rows: (string | number)[][] }, index: number) => boolean;
-  formatCell: (value: unknown) => string;
-}>();
-const emit = defineEmits<{
-  setChartMode: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data'];
-  downloadCurrent: [message: ChatMessage, item: ProcessItem];
-  registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
+  charts: ReturnType<typeof useChartCards>;
 }>();
 
-const table = computed(() => props.chartTable(props.item.chart));
+const table = computed(() => props.charts.chartTable(props.item.chart));
 const numericColumns = computed(
-  () => table.value?.headers.map((_, index) => props.numericColumn(table.value!, index)) ?? [],
+  () =>
+    table.value?.headers.map((_, index) => props.charts.numericColumn(table.value!, index)) ?? [],
 );
 const canDownloadChart = (item: ProcessItem) => chartHasData(item.chart);
 </script>

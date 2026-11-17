@@ -29,12 +29,7 @@ export function useChartCards(
         : undefined;
     const series = chart.series ?? [];
     if (!series.length) return undefined;
-    const xs: (string | number)[] = [];
-    series.forEach((s) =>
-      s.data.forEach((d) => {
-        if (!xs.includes(d.x)) xs.push(d.x);
-      }),
-    );
+    const xs = [...new Set(series.flatMap((item) => item.data.map((point) => point.x)))];
     const maps = series.map((s) => new Map(s.data.map((d) => [d.x, d.y])));
     return {
       headers: [
@@ -64,7 +59,7 @@ export function useChartCards(
   async function downloadCurrent(message: ChatMessage, item: ProcessItem) {
     const chart = item.chart;
     if (!chart) return;
-    if (chart.chart_type === 'table' || chartMode(message, item) === 'chart') {
+    if (chartMode(message, item) === 'chart') {
       await downloadChart(message, item);
       return;
     }
@@ -115,18 +110,6 @@ export function useChartCards(
   async function downloadChart(message: ChatMessage, item: ProcessItem) {
     const chart = item.chart;
     if (!chart) return;
-    if (chart.chart_type === 'table' && chart.table_data) {
-      const rows = [
-        chart.table_data.headers.map(csvCell).join(','),
-        ...chart.table_data.rows.map((row) => row.map(csvCell).join(',')),
-      ];
-      // BOM 让 Excel 正确识别 UTF-8 中文。
-      saveBlob(
-        new Blob([`﻿${rows.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }),
-        chartFileName(chart, 'csv'),
-      );
-      return;
-    }
     const key = chartKey(message, item);
     // 图表始终渲染，正常情况下直接取实例；取不到时等一帧再取。
     if (!chartRefs.get(key)) await nextTick();

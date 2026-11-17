@@ -1,7 +1,6 @@
 import { reactive, type Component, type Ref } from 'vue';
 import { Document } from '@element-plus/icons-vue';
 import { CloudIcon, SkillIcon, BotIcon, WrenchIcon } from '../lib/icons';
-import { layout } from '../lib/messageLayout';
 import { isRecord } from '../lib/sse';
 import { processStatusKeys, statusKeys } from '../types';
 import type { ChatMessage, ProcessItem, ComposerTranslation } from '../types';
@@ -87,9 +86,9 @@ export function useProcessTimeline(
   function toggleStep(message: ChatMessage, item: ProcessItem) {
     stepOverride.set(chartKey(message, item), !stepOpen(message, item));
   }
-  function stepCounts(message: ChatMessage) {
+  function stepCounts(items: ProcessItem[]) {
     const counts: Partial<Record<StepGroup, number>> = {};
-    layout(message).timeline.forEach((item) => {
+    items.forEach((item) => {
       const group = stepGroup(item);
       counts[group] = (counts[group] || 0) + 1;
     });
@@ -101,16 +100,6 @@ export function useProcessTimeline(
         icon: stepIcons[group],
         label: uiCopy.value.steps[group],
       }));
-  }
-  function liveStepName(message: ChatMessage) {
-    const item = message.process
-      .filter((p) => (p.kind === 'tool' || p.kind === 'subagent') && p.status === 'running')
-      .pop();
-    return item
-      ? item.kind === 'tool' && item.skillLoad
-        ? skillLabel(item.toolName)
-        : processTitle(item)
-      : '';
   }
   function summaryLabel(message: ChatMessage) {
     const label =
@@ -131,16 +120,30 @@ export function useProcessTimeline(
   }
   // ---- 状态栏：运行中把这一条变成「当前步骤 + 正在输出的文字」 ----
   // 阶段只从本地观测推断，不依赖上游任何格式约定。
-  function liveLabel(message: ChatMessage) {
-    const runningTool = message.process
-      .filter((p) => (p.kind === 'tool' || p.kind === 'subagent') && p.status === 'running')
-      .pop();
-    if (runningTool)
-      return t(runningTool.kind === 'subagent' ? 'AIAGENT.STATUS.SUBAGENT' : 'AIAGENT.STATUS.TOOL');
-    const text = message.process.filter((p) => p.kind === 'text').pop();
-    if (text && text.status === 'running') return t('AIAGENT.STATUS.ANSWER');
-    if (message.process.some((p) => p.kind === 'chart')) return t('AIAGENT.STATUS.RENDERING');
-    return message.process.length ? t('AIAGENT.STATUS.THINKING') : t('AIAGENT.STATUS.WAITING');
+  function liveStatus(message: ChatMessage) {
+    let lastText: ProcessItem | undefined;
+    let hasChart = false;
+    for (let index = message.process.length - 1; index >= 0; index--) {
+      const item = message.process[index];
+      if ((item.kind === 'tool' || item.kind === 'subagent') && item.status === 'running') {
+        return {
+          label: t(item.kind === 'subagent' ? 'AIAGENT.STATUS.SUBAGENT' : 'AIAGENT.STATUS.TOOL'),
+          name:
+            item.kind === 'tool' && item.skillLoad ? skillLabel(item.toolName) : processTitle(item),
+        };
+      }
+      if (item.kind === 'text' && !lastText) lastText = item;
+      if (item.kind === 'chart') hasChart = true;
+    }
+    const key =
+      lastText?.status === 'running'
+        ? 'AIAGENT.STATUS.ANSWER'
+        : hasChart
+          ? 'AIAGENT.STATUS.RENDERING'
+          : message.process.length
+            ? 'AIAGENT.STATUS.THINKING'
+            : 'AIAGENT.STATUS.WAITING';
+    return { label: t(key), name: '' };
   }
   // 技能名保持英文原文，只有拿不到名字时才回落到本地化占位。
   function skillLabel(name: string) {
@@ -217,9 +220,8 @@ export function useProcessTimeline(
     stepOpen,
     toggleStep,
     stepCounts,
-    liveStepName,
     summaryLabel,
-    liveLabel,
+    liveStatus,
     toolFacts,
     prettyJson,
   };

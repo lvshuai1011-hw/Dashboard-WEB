@@ -52,56 +52,37 @@
     <!-- 助手回答 -->
     <template v-else>
       <ProcessTimeline
+        :timeline="timeline"
         :reducedMotion="reducedMotion"
         :now="now"
         :message="message"
-        :layout="layout"
+        :items="messageLayout.timeline"
         :isActive="isActive"
-        :traceOpen="traceOpen"
-        :liveLabel="liveLabel"
-        :liveStepName="liveStepName"
-        :summaryLabel="summaryLabel"
-        :stepCounts="stepCounts"
-        :stepExpandable="stepExpandable"
-        :stepGroup="stepGroup"
-        :stepOpen="stepOpen"
-        :stepIcon="stepIcon"
-        :stepName="stepName"
-        :stepPreview="stepPreview"
-        :stepTime="stepTime"
-        :toolFacts="toolFacts"
-        :prettyJson="prettyJson"
         @scheduleScroll="emit('scheduleScroll')"
         @copyCode="(event) => emit('copyCode', event)"
       />
 
-      <div v-for="item in layout(message).body" :key="`body-${item.id}`" class="answer-part">
+      <div v-for="item in messageLayout.body" :key="`body-${item.id}`" class="answer-part">
         <Typewriter
           v-if="item.kind === 'text'"
           :content="item.text"
           :active="isActive(message)"
-          :highlight="item.id === keyMarkPart(message)"
+          :highlight="item.id === highlightPart"
           :sweep="justFinished(message)"
           @progress="emit('scheduleScroll')"
           :reduced-motion="reducedMotion"
           @copy-code="(event) => emit('copyCode', event)"
         />
         <ChartCard
+          :charts="charts"
           v-else-if="item.kind === 'chart'"
           :reducedMotion="reducedMotion"
           :message="message"
           :item="item"
           :uiCopy="uiCopy"
-          :chartMode="chartMode"
-          :chartTable="chartTable"
-          :numericColumn="numericColumn"
-          :formatCell="formatCell"
-          @setChartMode="(message, item, mode) => emit('setChartMode', message, item, mode)"
-          @downloadCurrent="(message, item) => emit('downloadCurrent', message, item)"
-          @registerChart="(message, item, chart) => emit('registerChart', message, item, chart)"
         />
       </div>
-      <p v-if="message.status === 'completed' && !bodyEntries(message).length" class="note">
+      <p v-if="message.status === 'completed' && !hasAnswer" class="note">
         {{ t('AIAGENT.STATUS.NO_ANSWER') }}
       </p>
       <p v-if="message.status === 'stopped'" class="note">
@@ -196,6 +177,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { layout } from '../lib/messageLayout';
+import { bodyEntries } from '../lib/messagePresentation';
 import AppTooltip from './AppTooltip.vue';
 import {
   Check,
@@ -211,9 +195,17 @@ import ChartCard from './ChartCard.vue';
 import Typewriter from './Typewriter.vue';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
-import type { ChatMessage, ProcessItem, TextAttachment } from '../types';
+import type { ChatMessage, TextAttachment } from '../types';
 import type { MessageItemProps } from '../componentTypes';
-defineProps<MessageItemProps>();
+const props = defineProps<MessageItemProps>();
+const messageLayout = computed(() => layout(props.message));
+const hasAnswer = computed(() => bodyEntries(props.message, messageLayout.value.body).length > 0);
+const highlightPart = computed(
+  () =>
+    messageLayout.value.body.find(
+      (item) => item.kind === 'text' && /\*\*[^*\n]+\*\*/.test(item.text),
+    )?.id,
+);
 const emit = defineEmits<{
   scheduleScroll: [];
   copyQuestion: [message: ChatMessage];
@@ -224,8 +216,5 @@ const emit = defineEmits<{
   askFollowUp: [question: string];
   copyCode: [event: MouseEvent];
   previewAttachment: [file: TextAttachment | null];
-  setChartMode: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data'];
-  downloadCurrent: [message: ChatMessage, item: ProcessItem];
-  registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
 }>();
 </script>

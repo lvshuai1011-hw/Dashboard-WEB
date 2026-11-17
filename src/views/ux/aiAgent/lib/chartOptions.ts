@@ -1,8 +1,6 @@
 import { merge, cloneDeep } from 'lodash-es';
 import type { ChartContent, ChartType } from '../types';
-// ---- SDA 图表渲染(echarts)----
-// 照搬 Dashboard rdd-agent/MessagePop.vue 的 dealChart/barMerge/lineMerge/pieMerge/scatterMerge,
-// 适配 SDA 新字段(chart_type/series/table_data)。base option 内联(对应 Dashboard chart-option.js)。
+// SDA 数据映射与展示主题分开：前者保留数据语义，后者统一视觉配置。
 const seriesColors = [
   '#1677ff',
   '#4b9b8f',
@@ -107,10 +105,10 @@ export function dealChart(content: ChartContent): Record<string, unknown> | null
   switch (content.chart_type) {
     case 'multi-bar':
     case 'bar':
-      return barMerge(content);
+      return cartesianChart(content, 'bar');
     case 'multi-line':
     case 'line':
-      return lineMerge(content);
+      return cartesianChart(content, 'line');
     case 'pie':
       return pieMerge(content, 'pie');
     case 'ring':
@@ -121,29 +119,40 @@ export function dealChart(content: ChartContent): Record<string, unknown> | null
       return null;
   }
 }
-function barMerge(config: ChartContent): Record<string, unknown> {
+// 柱状图和折线图共用类目对齐、稀疏轴编号映射和缩放规则。
+function cartesianChart(config: ChartContent, type: 'bar' | 'line'): Record<string, unknown> {
   const series = config.series ?? [];
-  const barXData = [...new Set(series.flatMap((s) => s.data.map((d) => d.x)))];
-  const yAxisIndices = [...new Set(series.map((item) => item.y_axis_index ?? 0))];
-  const isMultiAxis = yAxisIndices.length > 1;
-  const yAxisData = isMultiAxis
-    ? yAxisIndices.map((index, i) => ({
-        type: 'value',
-        name: series.find((s) => (s.y_axis_index ?? 0) === index)?.name || '',
-        position: i === 0 ? 'left' : 'right',
-        nameGap: 25,
-        nameTextStyle: { verticalAlign: 'top', align: i === 0 ? 'right' : 'left' },
-      }))
-    : {
-        type: 'value',
-        name: config.y_label,
-        nameGap: 25,
-        nameTextStyle: {
-          verticalAlign: 'top',
-          align: config.y_label && config.y_label.length > 7 ? 'left' : 'center',
+  const categories = [...new Set(series.flatMap((item) => item.data.map((point) => point.x)))];
+  const axisIndices = [...new Set(series.map((item) => item.y_axis_index ?? 0))];
+  const isBar = type === 'bar';
+  const category = categoryAxis(
+    categories,
+    isBar
+      ? undefined
+      : {
+          padding: [0, 0, 15, 0],
+          fontSize: 10,
+          formatter: textSlice,
         },
-      };
-  const cat = categoryAxis(barXData);
+  );
+  const yAxis =
+    axisIndices.length > 1
+      ? axisIndices.map((index, position) => ({
+          type: 'value',
+          name: series.find((item) => (item.y_axis_index ?? 0) === index)?.name || '',
+          position: position === 0 ? 'left' : 'right',
+          nameGap: 25,
+          nameTextStyle: { verticalAlign: 'top', align: position === 0 ? 'right' : 'left' },
+        }))
+      : {
+          type: 'value',
+          name: config.y_label,
+          nameGap: 25,
+          nameTextStyle: {
+            verticalAlign: 'top',
+            align: config.y_label && config.y_label.length > 7 ? 'left' : 'center',
+          },
+        };
   const option: Record<string, unknown> = {
     title: {
       text: config.title,
@@ -154,91 +163,43 @@ function barMerge(config: ChartContent): Record<string, unknown> {
       textStyle: { fontSize: 14, align: 'center', padding: [0, 10] },
     },
     legend: { bottom: '-3' },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { top: '20%', left: '3%', right: '7%', bottom: cat.bottom ?? '10%', containLabel: true },
+    tooltip: isBar
+      ? { trigger: 'axis', axisPointer: { type: 'shadow' } }
+      : { trigger: 'axis', confine: true },
+    grid: {
+      top: '20%',
+      left: '3%',
+      right: isBar ? '7%' : '8%',
+      bottom: category.bottom ?? (isBar ? '10%' : '15%'),
+      containLabel: true,
+    },
     xAxis: {
       type: 'category',
-      data: barXData,
-      axisLabel: cat.axisLabel,
+      data: categories,
+      axisLabel: category.axisLabel,
       name: config.x_label,
       nameLocation: 'end',
       nameTextStyle: { verticalAlign: 'top', align: 'right', padding: [20, 0, 0, 0] },
     },
-    yAxis: yAxisData,
+    yAxis,
     series: series.map((item, index) => {
-      const dataMap = new Map(item.data.map((d) => [d.x, d.y]));
+      const values = new Map(item.data.map((point) => [point.x, point.y]));
       return {
         name: item.name,
-        type: 'bar',
-        barMaxWidth: Math.max(8, 40 / series.length),
-        data: barXData.map((x) => [x, dataMap.get(x) ?? null]),
-        yAxisIndex: yAxisIndices.indexOf(item.y_axis_index ?? 0),
-        itemStyle: { color: seriesColors[index % seriesColors.length] },
+        type,
+        data: categories.map((x) => [x, values.get(x) ?? null]),
+        yAxisIndex: axisIndices.indexOf(item.y_axis_index ?? 0),
+        ...(isBar
+          ? {
+              barMaxWidth: Math.max(8, 40 / series.length),
+              itemStyle: { color: seriesColors[index % seriesColors.length] },
+            }
+          : { smooth: true }),
       };
     }),
   };
-  if (barXData.length > 20) option.dataZoom = dataZoomConfig;
-  return merge(cloneDeep(barOption), option);
-}
-function lineMerge(data: ChartContent): Record<string, unknown> {
-  const { title, x_label, y_label } = data;
-  const series = data.series ?? [];
-  const xData = [...new Set(series.flatMap((item) => item.data.map((d) => d.x)))];
-  const yAxisIndices = [...new Set(series.map((item) => item.y_axis_index ?? 0))];
-  const isMultiAxis = yAxisIndices.length > 1;
-  const seriesData = series.map((item) => {
-    const dataMap = new Map(item.data.map((d) => [d.x, d.y]));
-    return {
-      name: item.name,
-      type: 'line',
-      data: xData.map((x) => [x, dataMap.get(x) ?? null]),
-      smooth: true,
-      yAxisIndex: yAxisIndices.indexOf(item.y_axis_index ?? 0),
-    };
-  });
-  const yAxisData = isMultiAxis
-    ? yAxisIndices.map((index, i) => ({
-        type: 'value',
-        name: series.find((s) => (s.y_axis_index ?? 0) === index)?.name || '',
-        position: i === 0 ? 'left' : 'right',
-        nameGap: 25,
-        nameTextStyle: { verticalAlign: 'top', align: i === 0 ? 'right' : 'left' },
-      }))
-    : {
-        type: 'value',
-        name: y_label,
-        nameGap: 25,
-        nameTextStyle: {
-          verticalAlign: 'top',
-          align: y_label && y_label.length > 7 ? 'left' : 'center',
-        },
-      };
-  const cat = categoryAxis(xData, { padding: [0, 0, 15, 0], fontSize: 10, formatter: textSlice });
-  const option: Record<string, unknown> = {
-    title: {
-      text: title,
-      top: '0%',
-      left: 'center',
-      show: true,
-      width: '80%',
-      textStyle: { fontSize: 14, align: 'center', padding: [0, 10] },
-    },
-    tooltip: { trigger: 'axis', confine: true },
-    legend: { bottom: '-3' },
-    xAxis: {
-      type: 'category',
-      data: xData,
-      axisLabel: cat.axisLabel,
-      name: x_label,
-      nameLocation: 'end',
-      nameTextStyle: { verticalAlign: 'top', align: 'right', padding: [20, 0, 0, 0] },
-    },
-    grid: { top: '20%', left: '3%', right: '8%', bottom: cat.bottom ?? '15%', containLabel: true },
-    yAxis: yAxisData,
-    series: seriesData,
-  };
-  if (xData.length > 20) option.dataZoom = dataZoomConfig;
-  return merge(cloneDeep(lineOption), option);
+  if (categories.length > 20) option.dataZoom = cloneDeep(dataZoomConfig);
+  return merge(cloneDeep(isBar ? barOption : lineOption), option);
 }
 function pieMerge(data: ChartContent, type: 'pie' | 'ring'): Record<string, unknown> {
   const { title, series, summary } = data;

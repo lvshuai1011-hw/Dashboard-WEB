@@ -50,13 +50,10 @@ export function useChatStream(options: {
     return running.has(message.id);
   }
   const tails = new Map<string, { abort: () => void; timer: ReturnType<typeof setTimeout> }>();
-  // 仍在等待追问建议的答复（tails 不是响应式的，这里另记一份供界面判断答复是否已落定）。
-  const tailing = reactive(new Set<string>());
   function endTail(messageId: string) {
     const tail = tails.get(messageId);
     if (!tail) return;
     tails.delete(messageId);
-    tailing.delete(messageId);
     clearTimeout(tail.timer);
     tail.abort();
   }
@@ -114,7 +111,6 @@ export function useChatStream(options: {
         abort: handle.abort,
         timer: setTimeout(() => endTail(messageId), FOLLOW_UP_WAIT),
       });
-      tailing.add(messageId);
     } else handle.abort();
     persistHistory();
     scheduleScroll();
@@ -290,7 +286,6 @@ export function useChatStream(options: {
     now,
     streaming,
     isActive,
-    tailing,
     finishRequest,
     sendMessage,
     stopGeneration,

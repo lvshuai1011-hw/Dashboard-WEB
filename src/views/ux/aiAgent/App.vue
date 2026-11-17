@@ -87,32 +87,13 @@
           :feedback="feedback"
           :uiCopy="uiCopy"
           :formatTime="formatTime"
-          :layout="layout"
+          :timeline="timeline"
+          :charts="charts"
           :isActive="isActive"
           :justFinished="justFinished"
-          :keyMarkPart="keyMarkPart"
-          :bodyEntries="bodyEntries"
           :answerText="answerText"
           :canRegenerate="canRegenerate"
           :showFollowUps="showFollowUps"
-          :traceOpen="traceOpen"
-          :liveLabel="liveLabel"
-          :liveStepName="liveStepName"
-          :summaryLabel="summaryLabel"
-          :stepCounts="stepCounts"
-          :stepExpandable="stepExpandable"
-          :stepGroup="stepGroup"
-          :stepOpen="stepOpen"
-          :stepIcon="stepIcon"
-          :stepName="stepName"
-          :stepPreview="stepPreview"
-          :stepTime="stepTime"
-          :toolFacts="toolFacts"
-          :prettyJson="prettyJson"
-          :chartMode="chartMode"
-          :chartTable="chartTable"
-          :numericColumn="numericColumn"
-          :formatCell="formatCell"
           @scheduleScroll="scheduleScroll"
           @onMessageScroll="onMessageScroll"
           @jumpToBottom="jumpToBottom"
@@ -125,9 +106,6 @@
           @jumpToMessage="jumpToMessage"
           @copyCode="copyCode"
           @previewAttachment="previewAttachment"
-          @setChartMode="setChartMode"
-          @downloadCurrent="downloadCurrent"
-          @registerChart="registerChart"
           @registerScrollbar="registerScrollbar"
         />
         <Composer
@@ -179,7 +157,6 @@ import { Paperclip } from '@element-plus/icons-vue';
 import { PanelIcon } from './lib/icons';
 import { dashboardName } from './types';
 import type { ChatMessage, ProcessItem, Conversation } from './types';
-import { layout } from './lib/messageLayout';
 import { useConversations } from './composables/useConversations';
 import { useChatStream } from './composables/useChatStream';
 import { useAttachments } from './composables/useAttachments';
@@ -187,7 +164,7 @@ import { useChartCards } from './composables/useChartCards';
 import { useProcessTimeline } from './composables/useProcessTimeline';
 import { useQuestionEditor } from './composables/useQuestionEditor';
 import { useMessageActions } from './composables/useMessageActions';
-import { bodyEntries, answerText } from './lib/messagePresentation';
+import { messageMatches, answerText } from './lib/messagePresentation';
 import { useUiCopy } from './composables/useUiCopy';
 import ChatSidebar from './components/ChatSidebar.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -255,22 +232,6 @@ const {
   onMessageScroll,
   disposeScroll,
 } = scroll;
-function messageMatches(message: ChatMessage, query: string) {
-  const contains = (value?: string) =>
-    !!value?.normalize('NFKC').toLocaleLowerCase().includes(query);
-  return (
-    contains(message.content) ||
-    message.attachments?.some((file) => contains(file.name)) ||
-    message.process.some(
-      (item) =>
-        contains(item.text) ||
-        contains(item.answer) ||
-        contains(item.thinking) ||
-        contains(item.chart?.title) ||
-        contains(item.chart?.summary),
-    )
-  );
-}
 async function openHistoryResult(chat: Conversation) {
   const query = historyQuery.value.trim().normalize('NFKC').toLocaleLowerCase();
   switchConversation(chat.id);
@@ -340,16 +301,7 @@ const {
   scheduleSave,
   isDisposed: () => disposed,
 });
-const {
-  chartMode,
-  chartTable,
-  numericColumn,
-  formatCell,
-  chartKey,
-  downloadCurrent,
-  setChartMode,
-  registerChart,
-} = useChartCards(t, locale, uiCopy);
+const charts = useChartCards(t, locale, uiCopy);
 // 历史分组：收藏置顶，其余按最近更新时间分为今天 / 近 7 天 / 更早。
 const historyGroups = computed(() => {
   const start = new Date();
@@ -505,12 +457,6 @@ function justFinished(message: ChatMessage) {
     message.status === 'completed' && !!message.finishedAt && Date.now() - message.finishedAt < 1500
   );
 }
-// 正文中第一个含 **加粗** 的文本块；整条回答只高亮这一处。
-function keyMarkPart(message: ChatMessage) {
-  return layout(message).body.find(
-    (item) => item.kind === 'text' && /\*\*[^*\n]+\*\*/.test(item.text),
-  )?.id;
-}
 let motionQuery: MediaQueryList | undefined;
 function syncMedia() {
   reducedMotion.value = !!motionQuery?.matches;
@@ -573,25 +519,8 @@ const {
   isDisposed: () => disposed,
 });
 
-const {
-  traceOverride,
-  traceOpen,
-  toggleTrace,
-  stepGroup,
-  stepIcon,
-  stepName,
-  stepPreview,
-  stepTime,
-  stepExpandable,
-  stepOpen,
-  toggleStep,
-  stepCounts,
-  liveStepName,
-  summaryLabel,
-  liveLabel,
-  toolFacts,
-  prettyJson,
-} = useProcessTimeline(t, uiCopy, now, isActive, chartKey);
+const timeline = useProcessTimeline(t, uiCopy, now, isActive, charts.chartKey);
+const { traceOverride, toggleTrace, toggleStep } = timeline;
 
 const registerScrollbar = (value: unknown) => {
   scrollRef.value = (value as ScrollbarInstance | undefined) ?? undefined;

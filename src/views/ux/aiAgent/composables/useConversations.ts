@@ -1,3 +1,4 @@
+import { messageSearchValues, matchesQuery } from '../lib/messagePresentation';
 import { computed, nextTick, reactive, ref } from 'vue';
 import type { Ref } from 'vue';
 import type { InputInstance } from 'element-plus';
@@ -102,48 +103,18 @@ export function useConversations(options: {
   );
   // 收藏项单独置顶成一块，且不再在下面的历史列表里重复出现。
   const historyQuery = ref('');
-  function matchesHistory(chat: Conversation, query: string) {
-    const contains = (value: string | undefined) =>
-      !!value?.normalize('NFKC').toLocaleLowerCase().includes(query);
-    return (
-      contains(chat.title) ||
-      chat.attachments?.some((file) => contains(file.name)) ||
-      chat.messages.some(
-        (message) =>
-          contains(message.content) ||
-          message.attachments?.some((file) => contains(file.name)) ||
-          message.process.some(
-            (item) =>
-              contains(item.text) ||
-              contains(item.answer) ||
-              contains(item.thinking) ||
-              contains(item.chart?.title) ||
-              contains(item.chart?.summary),
-          ),
-      )
-    );
+  function historyValues(chat: Conversation) {
+    return [
+      chat.title,
+      ...(chat.attachments ?? []).map((file) => file.name),
+      ...chat.messages.flatMap(messageSearchValues),
+    ];
   }
   // 搜索时用命中片段替代日期行，保持两行密度；只输出文本，不注入 HTML。
   function historyMatch(chat: Conversation) {
     const query = historyQuery.value.trim().normalize('NFKC').toLocaleLowerCase();
-    const values = [
-      chat.title,
-      ...(chat.attachments ?? []).map((file) => file.name),
-      ...chat.messages.flatMap((message) => [
-        message.content,
-        ...(message.attachments ?? []).map((file) => file.name),
-        ...message.process.flatMap((item) => [
-          item.text,
-          item.answer,
-          item.thinking,
-          item.chart?.title,
-          item.chart?.summary,
-        ]),
-      ]),
-    ];
-    const text = (
-      values.find((value) => value?.normalize('NFKC').toLocaleLowerCase().includes(query)) || ''
-    )
+    const values = historyValues(chat);
+    const text = (values.find((value) => matchesQuery(value, query)) || '')
       .normalize('NFKC')
       .replace(/\s+/g, ' ');
     const index = text.toLocaleLowerCase().indexOf(query),
@@ -152,7 +123,11 @@ export function useConversations(options: {
   }
   const filteredHistory = computed(() => {
     const query = historyQuery.value.trim().normalize('NFKC').toLocaleLowerCase();
-    return query ? history.value.filter((chat) => matchesHistory(chat, query)) : history.value;
+    return query
+      ? history.value.filter((chat) =>
+          historyValues(chat).some((value) => matchesQuery(value, query)),
+        )
+      : history.value;
   });
   const pinned = computed(() => filteredHistory.value.filter((c) => c.favorite));
   const unpinned = computed(() => filteredHistory.value.filter((c) => !c.favorite));

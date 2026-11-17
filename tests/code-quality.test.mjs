@@ -5,6 +5,8 @@ import less from 'less';
 import { loadSource } from './load-source.mjs';
 
 const source = await loadSource(`
+  export { messageMatches, messageSearchValues } from './src/views/ux/aiAgent/lib/messagePresentation';
+  export { useProcessTimeline } from './src/views/ux/aiAgent/composables/useProcessTimeline';
   export { renderMarkdown } from './src/views/ux/aiAgent/lib/markdown';
   export { dealChart } from './src/views/ux/aiAgent/lib/chartOptions';
   export { readChartContent } from './src/views/ux/aiAgent/lib/chartSchema';
@@ -127,4 +129,59 @@ test('wordmark keyframes contain percentage selectors, never page selectors', as
   const { css } = await less.render(stylesheet);
   assert.match(css, /@keyframes vds-wordmark-write\s*\{\s*0%/);
   assert.doesNotMatch(css, /\.agent-page\s+\d+%/);
+});
+
+test('chart options keep independent zoom state and handle empty categories', () => {
+  const input = chart();
+  input.series[0].data = Array.from({ length: 21 }, (_, x) => ({ x, y: x }));
+  const first = source.dealChart(input);
+  first.dataZoom[0].start = 50;
+  const second = source.dealChart({ ...input, chart_type: 'line' });
+  assert.equal(second.dataZoom[0].start, 0);
+  assert.equal(source.dealChart({ chart_type: 'bar', series: [] }).series.length, 0);
+});
+
+test('history filtering and message location search the same normalized fields', () => {
+  const message = source.makeMessage('assistant');
+  message.content = 'ＡＢＣ';
+  message.attachments = [{ name: '报表.csv' }];
+  message.process = [
+    {
+      text: '',
+      answer: '套餐统计',
+      thinking: '正在查询',
+      chart: { title: '收入', summary: '预付费最高' },
+    },
+  ];
+  for (const query of ['abc', '报表', '套餐', '查询', '收入', '预付费']) {
+    assert.equal(source.messageMatches(message, query), true);
+  }
+  assert.equal(source.messageMatches(message, '不存在'), false);
+  assert.ok(source.messageSearchValues(message).includes('预付费最高'));
+});
+
+test('live status prioritizes the latest running tool and ignores completed text', () => {
+  const timeline = source.useProcessTimeline(
+    translate,
+    { value: {} },
+    { value: 0 },
+    () => true,
+    () => 'key',
+  );
+  const message = source.makeMessage('assistant');
+  assert.deepEqual(timeline.liveStatus(message), { label: 'AIAGENT.STATUS.WAITING', name: '' });
+  message.process = [
+    { kind: 'text', status: 'running' },
+    { kind: 'text', status: 'completed' },
+    { kind: 'chart', status: 'completed' },
+  ];
+  assert.equal(timeline.liveStatus(message).label, 'AIAGENT.STATUS.RENDERING');
+  message.process.push({ kind: 'tool', status: 'running', toolName: 'query' });
+  message.process.push({ kind: 'subagent', status: 'running', agentName: 'analyst' });
+  assert.deepEqual(timeline.liveStatus(message), {
+    label: 'AIAGENT.STATUS.SUBAGENT',
+    name: 'analyst',
+  });
+  message.process.at(-1).status = 'completed';
+  assert.deepEqual(timeline.liveStatus(message), { label: 'AIAGENT.STATUS.TOOL', name: 'query' });
 });

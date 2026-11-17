@@ -20,9 +20,6 @@
           @askFollowUp="(question) => emit('askFollowUp', question)"
           @copyCode="(event) => emit('copyCode', event)"
           @previewAttachment="(file) => emit('previewAttachment', file)"
-          @setChartMode="(message, item, mode) => emit('setChartMode', message, item, mode)"
-          @downloadCurrent="(message, item) => emit('downloadCurrent', message, item)"
-          @registerChart="(message, item, chart) => emit('registerChart', message, item, chart)"
         />
       </div>
     </el-scrollbar>
@@ -76,7 +73,7 @@ import { ArrowDown } from '@element-plus/icons-vue';
 import MessageItem from './MessageItem.vue';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
-import type { ChatMessage, ProcessItem, TextAttachment } from '../types';
+import type { ChatMessage, TextAttachment } from '../types';
 import type { MessageItemProps } from '../componentTypes';
 interface MessageListProps extends Omit<MessageItemProps, 'message'> {
   activeQuestionId: string;
@@ -103,9 +100,6 @@ const emit = defineEmits<{
   jumpToMessage: [id: string];
   copyCode: [event: MouseEvent];
   previewAttachment: [file: TextAttachment | null];
-  setChartMode: [message: ChatMessage, item: ProcessItem, mode: 'chart' | 'data'];
-  downloadCurrent: [message: ChatMessage, item: ProcessItem];
-  registerChart: [message: ChatMessage, item: ProcessItem, chart: unknown];
   registerScrollbar: [value: unknown];
 }>();
 </script>
