@@ -53,7 +53,7 @@
 
 组件通过 `lib/icons.ts` 中的 `TableIcon` 等名称引用图标。`global.less` 把相应的 SVG 用作遮罩，填色继承按钮文字的颜色，悬停、禁用和选中态因此可以共用一份图。新增图标时，在资源目录放入 SVG，在样式中关联文件名，再按调用方式导出组件。Markdown 代码块由 HTML 字符串生成，复制按钮复用同一套图标样式。生成中标识的圆点和圆环由 CSS 独立控制动画。
 
-欢迎页示意图及自身的减少动态规则在 `assets/welcome-trend.svg`。真实查询图表由 ECharts 绘制。浏览器标签页图标在仓库根目录的 `public/favicon.svg`。技能步骤使用项目内绘制的直角榫槽拼图（`assets/icons/skill.svg`）。移植时随整个 `aiAgent/` 目录复制。
+欢迎页示意图及自身的减少动态规则在 `assets/welcome-trend.svg`。真实查询图表由 ECharts 绘制。浏览器标签页图标在仓库根目录的 `public/favicon.svg`。移植页面时复制整个 `aiAgent/`，其中包括资源和拼图图标的许可声明。
 
 ## 维护与验证
 
