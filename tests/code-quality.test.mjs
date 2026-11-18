@@ -185,3 +185,15 @@ test('live status prioritizes the latest running tool and ignores completed text
   message.process.at(-1).status = 'completed';
   assert.deepEqual(timeline.liveStatus(message), { label: 'AIAGENT.STATUS.TOOL', name: 'query' });
 });
+
+test('代码着色区分语言注释、字符串、关键字和数字', () => {
+  const code = 'const value = "7"; // 42';
+  const html = source.renderMarkdown('```js\n' + code + '\n```', translate);
+  assert.match(html, /class="tok-k">const</);
+  assert.match(html, /class="tok-s">&quot;7&quot;</);
+  assert.match(html, /class="tok-c">\/\/ 42</);
+  assert.match(
+    source.renderMarkdown('```sql\nSELECT 42 --合计\n```', translate),
+    /class="tok-n">42</,
+  );
+});

@@ -2,8 +2,6 @@ import type { useProcessTimeline } from './composables/useProcessTimeline';
 import type { useChartCards } from './composables/useChartCards';
 import type { ChatMessage } from './types';
 import type { useUiCopy } from './composables/useUiCopy';
-
-// Shared contract for the message list and its message renderer.
 export interface MessageItemProps {
   locatedMessageId: string;
   copiedMessageId: string;

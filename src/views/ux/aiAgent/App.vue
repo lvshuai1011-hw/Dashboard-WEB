@@ -254,7 +254,7 @@ function onPageShortcut(event: KeyboardEvent) {
     onWorkspaceKeydown(event);
 }
 function onWorkspaceKeydown(event: KeyboardEvent) {
-  if (event.isComposing || event.keyCode === 229) return;
+  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE) return;
   // 不抢占弹窗/文件选择器的 Escape，也不让快捷新建使当前弹窗串到另一会话。
   if (attachmentPreview.value || pendingDelete.value) return;
   if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
@@ -272,7 +272,6 @@ function onWorkspaceKeydown(event: KeyboardEvent) {
     inputRef.value?.focus();
   }
 }
-// 图表实例按 ProcessItem.id 缓存，供下载按钮取 getDataURL；组件卸载时由 ChartView 自身 dispose。
 const uiCopy = useUiCopy(locale);
 const {
   attachmentPreview,
@@ -306,8 +305,9 @@ const charts = useChartCards(t, locale, uiCopy);
 const historyGroups = computed(() => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  const today = start.getTime(),
-    week = today - 6 * 86_400_000;
+  const today = start.getTime();
+  // 七天窗口包含今天，按本地日历回退六天以兼容夏令时。
+  const week = start.setDate(start.getDate() - 6);
   return [
     { key: 'favorites', label: t('AIAGENT.HISTORY.FAVORITES'), items: pinned.value },
     {
@@ -389,11 +389,8 @@ const { copiedMessageId, feedback, setFeedback, copyQuestion, copyAnswer, copyCo
 function toggleProcess(item: ProcessItem) {
   item.expanded = !item.expanded;
   item.manual = true;
-  // 手动查看过程时保留阅读位置，避免展开后立即滚离当前卡片。
 }
-// 在稳定根节点原生委托，不依赖每个 v-for 按钮自己的 Vue click 绑定。
-// 按 id 在**全部会话**里找消息：并发后同时可能有多个会话的消息渲染在屏幕上，
-// 只在当前会话里找会让其它会话的卡片点了没反应。
+// 根节点委托的点击事件使用消息标识定位目标。
 function findMessage(id: string | undefined) {
   if (!id) return undefined;
   for (const conversation of conversations.value) {
@@ -443,18 +440,23 @@ function setDraft(content: string) {
   draft.value = content;
   void nextTick(() => inputRef.value?.focus());
 }
+const IME_COMPOSITION_KEY_CODE = 229;
 function onInputKeydown(raw: Event | KeyboardEvent) {
   const event = raw as KeyboardEvent;
   // Enter 直接发送，Shift+Enter 换行；中文输入法组字期间（isComposing / keyCode 229）不拦截。
-  if (event.isComposing || event.keyCode === 229 || event.key !== 'Enter') return;
+  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE || event.key !== 'Enter')
+    return;
   if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
   event.preventDefault();
   sendMessage();
 }
 // 刚完成（1.5 秒内）的答复在落入正文时播放高亮动画；刷新、切换会话加载的历史不播放。
+const FRESH_ANSWER_WINDOW_MS = 1500;
 function justFinished(message: ChatMessage) {
   return (
-    message.status === 'completed' && !!message.finishedAt && Date.now() - message.finishedAt < 1500
+    message.status === 'completed' &&
+    !!message.finishedAt &&
+    Date.now() - message.finishedAt < FRESH_ANSWER_WINDOW_MS
   );
 }
 let motionQuery: MediaQueryList | undefined;

@@ -116,7 +116,7 @@ async function readPresentation(read: Awaited<ReturnType<typeof officeArchive>>)
       if (!notesPath.startsWith('ppt/notesSlides/')) throw officeFailure();
       const notesXml = await read(notesPath),
         notesRoot = notesXml && xmlElements(notesXml, 'spTree')[0];
-      // 备注以引用块跟在所属页后面；不增加界面文案或语言包键。
+      // 备注以引用块跟在所属幻灯片后面。
       if (notesRoot)
         blocks.push(
           ...presentationBlocks(notesRoot).map((text) => '> ' + text.replace(/\n/g, '\n> ')),
@@ -192,7 +192,7 @@ export async function readOfficeFile(file: File): Promise<string> {
       Array.from(sheet.attributes).find((attr) => attr.localName === 'id')?.value;
     const rel = rels.find((item) => item.getAttribute('Id') === id);
     if (!rel || rel.getAttribute('TargetMode') === 'External') throw officeFailure();
-    // Chartsheets have no cells; do not confuse a chart-only workbook with a readable data table.
+    // 图表工作表没有单元格，仅处理含数据的工作表。
     if (!rel.getAttribute('Type')?.endsWith('/worksheet')) continue;
     const path = officePath('xl/', rel.getAttribute('Target') || '');
     if (!path.startsWith('xl/worksheets/')) throw officeFailure();
@@ -207,7 +207,7 @@ export async function readOfficeFile(file: File): Promise<string> {
       const rowNumber = Number(row.getAttribute('r') || previousRow + 1);
       if (!Number.isInteger(rowNumber) || rowNumber <= previousRow || rowNumber > EXCEL_MAX_ROWS)
         throw officeFailure();
-      // Explicit row numbers retain sparse row locations without allocating millions of empty rows.
+      // 保留原始行号，稀疏工作表无需为空行分配内存。
       const cells: string[] = [];
       let previousColumn = -1;
       for (const cell of Array.from(row.children).filter((el) => el.localName === 'c')) {
@@ -233,7 +233,7 @@ export async function readOfficeFile(file: File): Promise<string> {
           const formatId = styleIds[Number(cell.getAttribute('s') || 0)] || 0;
           text = excelValue(value, formatId, formats.get(formatId) || '', date1904);
         }
-        // Formula values are cached by Excel; if not cached, preserve the literal formula and never invent a result.
+        // 优先读取公式缓存值，缺失时展示公式原文。
         if (!text && xmlElements(cell, 'f').length)
           text = `=${xmlElements(cell, 'f')[0].textContent || ''}`;
         cells[column] = /[\t\r\n"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;

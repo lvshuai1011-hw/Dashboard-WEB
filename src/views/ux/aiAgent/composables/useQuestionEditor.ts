@@ -34,7 +34,7 @@ export function useQuestionEditor(options: {
     const question = message.role === 'user' ? message : messages.value[index - 1];
     if (!question || question.role !== 'user') return;
     const prior = questionEdits.get(activeId.value);
-    // Preserve a pending draft, including attachments, so Cancel restores it instead of silently discarding it.
+    // 保留文本和附件，取消编辑时一并恢复。
     questionEdits.set(activeId.value, {
       userId: question.id,
       draft: prior?.draft ?? draft.value,

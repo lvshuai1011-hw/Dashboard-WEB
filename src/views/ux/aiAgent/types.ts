@@ -53,8 +53,7 @@ export interface ProcessItem {
   // 这条 tool 事件只是「加载技能说明书」（title: "Loaded skill: xxx"），
   // 不是真正的工具执行——渲染时降级成一行淡色提示，不画成可展开的执行卡片。
   skillLoad?: boolean;
-  // 服务端在 finish_stop 帧里点名的那一轮才是答复正文（参考 Dashboard 的 finish_stop 改名机制），
-  // 其余文本都是过程叙述。只有这个标记为真的文本会被提升出折叠区。
+  // 无图表时，结束帧指定的文本轮作为最终答复。
   isFinal?: boolean;
 }
 export interface TextAttachment {
@@ -77,10 +76,9 @@ export interface ChatMessage {
   activeSubagent?: number;
   errorKey?: string;
   errorDetail?: string;
-  // 最近一次收到任意事件（含心跳）的时刻：用来判断「真在动」还是「上游静默」，
-  // 以及给状态栏计时。心跳也会刷新它——这正是长静默期仍能证明模型存活的关键。
+  // 最近一次收到事件或心跳的时间。
   lastSignalAt?: number;
-  // 本轮接收到的字节总数与事件数，用于状态栏显示「已收到 N 段内容」。
+  // 记录本轮接收的流量。
   streamBytes?: number;
   // 模型在答复结束前通过 json 事件下发的追问建议（最多 3 条）。
   followUps?: string[];
@@ -131,8 +129,6 @@ export const processStatusKeys: Record<ProcessStatus, string> = {
   error: 'AIAGENT.PROCESS.ERROR',
   stopped: 'AIAGENT.PROCESS.STOPPED',
 };
-// SDA 的 tool 事件 metadata.toolName 恒为 "skill"，真正的技能名在 content 里。
-// 技能名按用户要求保持英文原文（query-planning / query-execute / render-chart），不翻译。
 export const errorKeys: Record<string, string> = {
   ExecuteAgentContentError: 'AIAGENT.ERROR.CONTENT',
   ExecuteAgentSafetyCheckError: 'AIAGENT.ERROR.SAFETY',

@@ -108,7 +108,6 @@ export function useProcessTimeline(
       ? `${label} · ${uiCopy.value.usedTime(((message.finishedAt - message.createdAt) / 1000).toFixed(1))}`
       : label;
   }
-  // Running traces expand automatically; explicit user choices take precedence.
   const traceOverride = reactive(new Map<string, boolean>());
   function traceOpen(message: ChatMessage) {
     const manual = traceOverride.get(message.id);
@@ -177,7 +176,7 @@ export function useProcessTimeline(
     const facts: { label: string; value: string }[] = [];
     if (item.toolName) facts.push({ label: t('AIAGENT.PROCESS.SKILL'), value: item.toolName });
     facts.push({ label: t('AIAGENT.PROCESS.STATUS'), value: t(processStatusKeys[item.status]) });
-    // duration 单位为毫秒（与参考实现 rdd-agent/MessagePop.vue 一致），不要当秒再除 1000。
+    // 上游耗时单位为毫秒。
     if (item.duration != null)
       facts.push({
         label: t('AIAGENT.PROCESS.DURATION_LABEL'),

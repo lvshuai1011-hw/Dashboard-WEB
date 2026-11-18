@@ -160,7 +160,7 @@ export function useChatStream(options: {
       elapsedTimer = setInterval(() => {
         now.value = Date.now();
       }, 500);
-    // Register before transport callbacks, including synchronous startup failures.
+    // 先登记请求，再启动传输，以便同步失败时也能清理句柄。
     let transportAbort: (() => void) | undefined;
     let cancellationRequested = false;
     running.set(message.id, {
@@ -206,7 +206,7 @@ export function useChatStream(options: {
           endTail(message.id);
           return;
         }
-        // Transport HTTP failures carry the response status on the Error instance.
+        // 传输层将 HTTP 状态码保存在错误对象上。
         const status = (error as { status?: number } | null)?.status;
         message.errorKey =
           status === 401 || status === 403 ? 'AIAGENT.ERROR.AUTH' : 'AIAGENT.ERROR.NETWORK';
@@ -223,9 +223,7 @@ export function useChatStream(options: {
     scheduleScroll();
   }
   // 只停止指定消息；不传则停止当前会话里正在跑的那条。
-  // 注意调用方必须传**消息对象**，不能直接把 @click 绑到这个函数上：
-  // Vue 会把 MouseEvent 当第一个实参传进来，target 变成事件对象，id 为 undefined，
-  // finishRequest 拿不到句柄后静默返回——表现为「点停止没反应」。
+  // 模板通过包装函数调用，避免把点击事件当成消息参数。
   function stopGeneration(message?: ChatMessage) {
     // 当前会话优先；找不到再全局找，避免用户切了会话后停不到原来那条。
     const target =

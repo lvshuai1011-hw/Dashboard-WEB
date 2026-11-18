@@ -5,7 +5,7 @@ export const useLoginStore = defineStore('loginInfo', () => {
   try {
     previewToken = sessionStorage.getItem('previewCsrf') || previewToken;
   } catch {
-    /* Storage may be unavailable in an embedded preview. */
+    /* 嵌入页面可能无法访问浏览器存储。 */
   }
   const csrfWebToken = ref(previewToken);
   const pathPrefix = computed(() => '/vds');

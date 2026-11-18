@@ -82,7 +82,7 @@ interface MessageListProps extends Omit<MessageItemProps, 'message'> {
   questionEntries: ChatMessage[];
 }
 const props = defineProps<MessageListProps>();
-// Keep list-only fields out of the message DOM; forward the shared typed contract together.
+// 剔除列表专用属性，避免它们透传到消息根元素。
 const messageProps = computed(() => {
   const { activeQuestionId, following, messages, questionEntries, ...shared } = props;
   return shared;

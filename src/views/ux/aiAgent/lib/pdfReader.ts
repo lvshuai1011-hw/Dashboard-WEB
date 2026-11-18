@@ -7,6 +7,7 @@ const pdfAssets = import.meta.glob('/node_modules/pdfjs-dist/{cmaps,standard_fon
   query: '?url',
   import: 'default',
 }) as Record<string, string>;
+const PDF_READ_TIMEOUT_MS = 30_000;
 class PdfBinaryDataFactory {
   async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
     const folder =
@@ -33,7 +34,7 @@ export async function readPdfFile(file: File): Promise<string> {
   });
   const timeout = setTimeout(() => {
     void task.destroy().catch(() => undefined);
-  }, 30000);
+  }, PDF_READ_TIMEOUT_MS);
   try {
     const document = await task.promise;
     if (document.numPages > MAX_DOCUMENT_PAGES) throw new Error('DOCUMENT_PAGES');

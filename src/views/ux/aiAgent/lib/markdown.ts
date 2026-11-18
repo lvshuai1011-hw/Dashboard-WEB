@@ -27,16 +27,12 @@ export function inlineMarkdown(value: string) {
     result += escapeHtml(value.slice(offset, match.index));
     const [, code, label, url, bold, italic] = match;
     const href = url ? safeUrl(url) : '';
-    result +=
-      code !== undefined
-        ? `<code>${escapeHtml(code)}</code>`
-        : label !== undefined
-          ? href
-            ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
-            : escapeHtml(match[0])
-          : bold !== undefined
-            ? `<strong>${escapeHtml(bold)}</strong>`
-            : `<em>${escapeHtml(italic)}</em>`;
+    if (code !== undefined) result += `<code>${escapeHtml(code)}</code>`;
+    else if (label !== undefined && href)
+      result += `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+    else if (bold !== undefined) result += `<strong>${escapeHtml(bold)}</strong>`;
+    else if (italic !== undefined) result += `<em>${escapeHtml(italic)}</em>`;
+    else result += escapeHtml(match[0]);
     offset = match.index! + match[0].length;
   }
   return result + escapeHtml(value.slice(offset));
@@ -63,34 +59,36 @@ export const SQL_KEYWORDS = new Set(
 export const CODE_PLAIN = /^(?:|text|txt|plain|plaintext|log|output|csv|markdown|md)$/;
 export const CODE_HASH =
   /^(?:py|python|sh|bash|shell|zsh|yaml|yml|toml|ruby|rb|ini|conf|dockerfile|makefile|r|perl|powershell|ps1)$/;
+const MAX_HIGHLIGHT_LENGTH = 20_000;
+const MAX_DETAILS_DEPTH = 4;
+const TYPING_CHUNK_SIZE = 15;
 export function highlightCode(code: string, language: string): string {
   const lang = language.trim().toLowerCase().split(/\s+/)[0] ?? '';
-  if (CODE_PLAIN.test(lang) || code.length > 20000) return escapeHtml(code);
-  const comment = CODE_HASH.test(lang)
-    ? '#[^\\n]*'
-    : lang === 'sql'
-      ? '--[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/'
-      : lang === 'json'
-        ? '(?!)'
-        : '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/';
-  const pattern = new RegExp(
-    `(${comment})|("(?:\\\\.|[^"\\\\\\n])*"|'(?:\\\\.|[^'\\\\\\n])*'|\`(?:\\\\.|[^\`\\\\])*\`)|\\b(\\d+(?:\\.\\d+)?)\\b|\\b([A-Za-z_]\\w*)\\b`,
-    'g',
+  if (CODE_PLAIN.test(lang) || code.length > MAX_HIGHLIGHT_LENGTH) return escapeHtml(code);
+  const tokens = [];
+  if (CODE_HASH.test(lang)) tokens.push(/(?<comment>#[^\n]*)/.source);
+  else if (lang === 'sql') tokens.push(/(?<comment>--[^\n]*|\/\*[\s\S]*?\*\/)/.source);
+  else if (lang !== 'json') tokens.push(/(?<comment>\/\/[^\n]*|\/\*[\s\S]*?\*\/)/.source);
+  tokens.push(
+    /(?<string>"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)/.source,
+    /(?<number>\b\d+(?:\.\d+)?\b)/.source,
+    /(?<word>\b[A-Za-z_]\w*\b)/.source,
   );
+  const pattern = new RegExp(tokens.join('|'), 'g');
   let html = '',
     last = 0;
   for (const match of code.matchAll(pattern)) {
-    const [text, isComment, isString, isNumber, word] = match;
-    const kind = isComment
-      ? 'c'
-      : isString
-        ? 's'
-        : isNumber
-          ? 'n'
-          : word &&
-              (lang === 'sql' ? SQL_KEYWORDS.has(word.toLowerCase()) : CODE_KEYWORDS.has(word))
-            ? 'k'
-            : '';
+    const text = match[0];
+    const { comment, string, number, word } = match.groups!;
+    let kind = '';
+    if (comment) kind = 'c';
+    else if (string) kind = 's';
+    else if (number) kind = 'n';
+    else if (
+      word &&
+      (lang === 'sql' ? SQL_KEYWORDS.has(word.toLowerCase()) : CODE_KEYWORDS.has(word))
+    )
+      kind = 'k';
     if (!kind) continue;
     html += `${escapeHtml(code.slice(last, match.index))}<span class="tok-${kind}">${escapeHtml(text)}</span>`;
     last = match.index! + text.length;
@@ -98,9 +96,8 @@ export function highlightCode(code: string, language: string): string {
   return html + escapeHtml(code.slice(last));
 }
 export const CHECK_ICON =
-  '<svg class="copy-done" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
-export const COPY_ICON =
-  '<svg class="copy-idle" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>';
+  '<span class="agent-icon icon-check copy-done" aria-hidden="true"></span>';
+export const COPY_ICON = '<span class="agent-icon icon-copy copy-idle" aria-hidden="true"></span>';
 export function renderMarkdown(source: string, t: ComposerTranslation, depth = 0): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const result: string[] = [];
@@ -159,7 +156,7 @@ export function renderMarkdown(source: string, t: ComposerTranslation, depth = 0
       continue;
     }
     // 只接受无任意属性的 details/summary 子集，重新生成安全标签；其它原始 HTML 一律转义。
-    if (depth < 4 && /^<details(?: open)?>$/.test(line.trim())) {
+    if (depth < MAX_DETAILS_DEPTH && /^<details(?: open)?>$/.test(line.trim())) {
       const rest = lines.slice(i).join('\n'),
         end = detailsEnd(rest);
       if (end > 0 && !rest.slice(end).split('\n')[0].trim()) {
@@ -184,7 +181,7 @@ export function renderMarkdown(source: string, t: ComposerTranslation, depth = 0
       const hasLeadingPipe = line.trimStart().startsWith('|');
       i += 2;
       while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
-        // A fenced code block or an unframed expression after a framed table is not a row.
+        // 代码围栏或缺少外框的表达式表示前一张带外框的表格已结束。
         const candidate = lines[i].trim();
         if (/^(`{3,}|~{3,})/.test(candidate) || (hasLeadingPipe && !candidate.startsWith('|')))
           break;
@@ -233,7 +230,7 @@ export function renderMarkdown(source: string, t: ComposerTranslation, depth = 0
 export function typingChunk(pending: string): string {
   let offset = 0,
     count = 0;
-  while (offset < pending.length && count < 15) {
+  while (offset < pending.length && count < TYPING_CHUNK_SIZE) {
     const rest = pending.slice(offset);
     if (/^<details(?: open)?>/.test(rest)) {
       if (offset) break;

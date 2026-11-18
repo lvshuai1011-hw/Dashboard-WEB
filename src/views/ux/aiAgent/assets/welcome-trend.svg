@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 80" color="#3370ff">
+  <style>
+    .trend {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.25;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      stroke-dasharray: 1;
+      animation: draw 1.15s 0.18s ease-out both;
+    }
+    .area { animation: appear 0.36s 0.96s ease-out both; }
+    .endpoint { animation: appear 0.36s 1.33s ease-out both; }
+    @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+    @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .trend, .area, .endpoint { animation: none; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="area" x2="0%" y2="100%">
+      <stop stop-color="currentColor" stop-opacity=".16"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity=".015"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#eef3ff" stroke-dasharray="3 5">
+    <line x1="12" y1="23" x2="318" y2="23"/>
+    <line x1="12" y1="46" x2="318" y2="46"/>
+    <line x1="12" y1="69" x2="318" y2="69"/>
+  </g>
+  <polygon class="area" fill="url(#area)" points="12,63 49,56 83,59 120,36 154,45 190,29 226,35 262,21 294,25 318,11 318,69 12,69"/>
+  <polyline class="trend" pathLength="1" points="12,63 49,56 83,59 120,36 154,45 190,29 226,35 262,21 294,25 318,11"/>
+  <g class="endpoint">
+    <circle cx="318" cy="11" r="7" fill="#eef3ff"/>
+    <circle cx="318" cy="11" r="3.5" fill="currentColor"/>
+  </g>
+</svg>

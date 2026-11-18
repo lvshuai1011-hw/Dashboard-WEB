@@ -45,9 +45,7 @@ function isTable(value: unknown): value is ChartTableData {
   );
 }
 
-/** Validate both SSE payloads and saved history before components dereference them.
- * Invalid payloads remain ordinary JSON process entries; never coerce business values.
- */
+/** 流式响应和历史记录共用此校验；无法识别的数据保留为普通过程项。 */
 export function readChartContent(value: unknown): ChartContent | undefined {
   if (!isRecord(value) || !CHART_TYPES.has(String(value.chart_type))) return undefined;
   if (typeof value.title !== 'string') return undefined;

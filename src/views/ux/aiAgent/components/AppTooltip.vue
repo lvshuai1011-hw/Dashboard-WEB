@@ -17,6 +17,6 @@
 <script setup lang="ts">
 import { ElTooltip } from 'element-plus';
 
-// Popovers are teleported outside .agent-page; their shared class is styled in global.less.
+// 提示层挂在页面根节点之外，外观由 global.less 控制。
 defineOptions({ inheritAttrs: false });
 </script>

@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-/** Compile the actual TS modules for Node tests without maintaining a second implementation. */
+/** 测试直接加载业务模块，避免维护两套解析逻辑。 */
 export async function loadSource(contents, options = {}) {
   const { outputFiles } = await build({
     stdin: { contents, resolveDir: fileURLToPath(new URL('..', import.meta.url)) },

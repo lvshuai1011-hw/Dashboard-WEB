@@ -14,7 +14,7 @@ export function bodyEntries(message: ChatMessage, body: ProcessItem[] = layout(m
     .filter(Boolean);
 }
 export function answerText(message: ChatMessage) {
-  // 用户评审修正：中断后仍可复制已收到的文字，不把过程文本冒充已完成的最终答复。
+  // 中断后仍可复制已经进入正文的内容。
   if (message.status === 'stopped' || message.status === 'error') {
     return message.process
       .map((item) =>

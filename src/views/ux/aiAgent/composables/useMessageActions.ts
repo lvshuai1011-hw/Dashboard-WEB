@@ -3,6 +3,8 @@ import { ElMessage } from 'element-plus';
 import { STORAGE_KEY } from '../types';
 import type { ChatMessage, ComposerTranslation } from '../types';
 
+const MAX_SAVED_FEEDBACK = 1000;
+const COPY_CONFIRMATION_MS = 1800;
 export function useMessageActions(
   t: ComposerTranslation,
   answerText: (message: ChatMessage) => string,
@@ -26,7 +28,7 @@ export function useMessageActions(
               typeof item[0] === 'string' &&
               ['up', 'down'].includes(item[1]),
           )
-          .slice(-1000),
+          .slice(-MAX_SAVED_FEEDBACK),
       );
     } catch {
       return new Map();
@@ -37,7 +39,10 @@ export function useMessageActions(
     if (feedback.get(message.id) === value) feedback.delete(message.id);
     else feedback.set(message.id, value);
     try {
-      localStorage.setItem(`${STORAGE_KEY}:feedback`, JSON.stringify([...feedback].slice(-1000)));
+      localStorage.setItem(
+        `${STORAGE_KEY}:feedback`,
+        JSON.stringify([...feedback].slice(-MAX_SAVED_FEEDBACK)),
+      );
     } catch {
       ElMessage.warning(t('AIAGENT.HISTORY.SAVE_FAILED'));
     }
@@ -48,7 +53,7 @@ export function useMessageActions(
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => {
       copiedMessageId.value = '';
-    }, 1800);
+    }, COPY_CONFIRMATION_MS);
   }
   async function copyQuestion(message: ChatMessage) {
     if (await copyText(message.content)) markCopied(message.id);
@@ -99,7 +104,7 @@ export function useMessageActions(
         const timer = setTimeout(() => {
           button.classList.remove('copied');
           codeTimers.delete(timer);
-        }, 1800);
+        }, COPY_CONFIRMATION_MS);
         codeTimers.add(timer);
       });
   }

@@ -19,7 +19,7 @@ let observer: ResizeObserver | undefined;
 // 有 series 但每个点都没有数值 = 服务端确实查回了空结果集，改用空状态替代空坐标轴。
 const isEmpty = computed(() => !!props.content?.chart_type && !chartHasData(props.content));
 const render = () => {
-  // v-if can replace the canvas host when data becomes empty or reappears.
+  // 空数据和图表互相切换时，画布宿主会被重新创建。
   if (inst && inst.getDom() !== root.value) {
     observer?.disconnect();
     inst.dispose();
@@ -70,7 +70,7 @@ function getDataURL(options?: Record<string, unknown>): string {
   } catch {
     return '';
   } finally {
-    // A failed export must not leave its title and padding on the live chart.
+    // 导出失败时也要恢复交互图表的标题和边距。
     if (!chart.isDisposed())
       chart.setOption({
         animation: !props.reducedMotion,

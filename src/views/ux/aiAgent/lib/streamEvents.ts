@@ -37,14 +37,12 @@ export function makeMessage(role: ChatMessage['role'], content: string, prompt =
 export function closeProcess(item: ProcessItem, status: ProcessStatus = 'completed') {
   if (item.status !== 'running') return;
   item.status = status;
-  // 服务端在 tool 事件的 metadata.duration 里给了真实耗时，要保留；
-  // 只有没拿到时才回落到本地计时（此前无条件覆盖，导致显示成 0.0s）。
+  // 工具耗时优先取服务端实测值，缺失时才计算本地时间差。
   if (item.duration == null) item.duration = Math.max(0, Date.now() - item.startTime);
   item.expanded = status === 'error';
 }
 export function addProcess(message: ChatMessage, kind: ProcessKind): ProcessItem {
-  // 只收尾已完成的上一步，不折叠任何卡片：早先在这里统一 expanded=false，
-  // 导致每来一个新 skill 就把用户正在看的思考收回去。
+  // 步骤结束时保留展开状态，读者可以继续查看已有内容。
   message.process.forEach((p) => {
     if (p.kind !== 'subagent') closeProcess(p);
   });
@@ -144,9 +142,7 @@ export function applyAgentEvent(
       } else if (event.toolName === 'skill') {
         // SDA：metadata.toolName 恒为 "skill"，真正的技能名在 content；每个技能发 running/completed 两次。
         // status/duration 都在内层 metadata 里（不在内层顶层）。
-        // 实测这两次事件只相隔 16ms、title 是 "Loaded skill: xxx" ——它是「加载技能说明书」，
-        // 不是真正执行查询（真正的 executeCypherQuery 从不下发事件）。标成 kind 之外的一个弱提示，
-        // 避免把 16ms 的读文件说成「执行工具」误导用户。
+        // 加载技能说明单独展示，避免将加载耗时计入工具执行时间。
         const meta = isRecord(event.raw.inner.metadata) ? event.raw.inner.metadata : {};
         const status = textValue(meta.status);
         let item = message.process.find(
@@ -197,7 +193,7 @@ export function applyAgentEvent(
     }
     case 'done':
     case 'finish_stop':
-      // 参考 Dashboard：finish_stop 帧自带内层 messageId，点名的那一轮文本才是答复正文。
+      // 结束帧里的 messageId 标识最终文本轮。
       markFinalTurn(
         message,
         textValue(event.raw.inner.messageId) || textValue(event.raw.messageID),
@@ -237,7 +233,7 @@ export function handleJsonEvent(message: ChatMessage, event: StreamEvent) {
       const item = addProcess(message, 'chart');
       item.chart = chart;
       closeProcess(item, 'completed');
-      item.expanded = true; // 流式期间展开让用户先看到图表；完成后 finishRequest 统一收起。
+      item.expanded = true;
     } else if (isRecord(parsed)) {
       const record = parsed as JsonRecord;
       const text =

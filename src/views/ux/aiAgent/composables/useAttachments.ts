@@ -10,6 +10,9 @@ import {
 } from '../types';
 import type { ComposerTranslation, Conversation, TextAttachment } from '../types';
 
+const BYTES_PER_MIB = 1024 ** 2;
+const fileSizeLabel = (bytes: number) => `${bytes / BYTES_PER_MIB} MB`;
+
 export function useAttachments({
   current,
   activeId,
@@ -34,8 +37,7 @@ export function useAttachments({
   const draftAttachments = computed(() => current.value.attachments || []);
   const attachmentReading = computed(() => attachmentReadingIds.has(activeId.value));
   const attachmentError = computed(() => attachmentErrors.get(activeId.value) || '');
-  // 用户指定“添加附件”与简短格式说明；本地中英副本避免依赖不可修改的外部语言包。
-  // Word/Excel/PowerPoint 对应 DOCX/XLSX/PPTX，仍不接收旧 DOC/XLS。
+  // 附件提示使用页面自带的中英文文案。
   const attachmentCopy = computed(() =>
     locale.value.toLowerCase().startsWith('zh')
       ? {
@@ -43,7 +45,7 @@ export function useAttachments({
           formatsTitle: '支持的文件格式',
           formatsSummary: '支持 .pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
           formats: '支持 PDF/Word/Excel/PowerPoint/CSV/TXT/Markdown/JSON',
-          limits: `每条问题最多添加 ${MAX_ATTACHMENTS} 个文件，每个文件不超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB。`,
+          limits: `每条问题最多添加 ${MAX_ATTACHMENTS} 个文件，每个文件不超过 ${fileSizeLabel(MAX_ATTACHMENT_BYTES)}。`,
           countError: `每条问题最多添加 ${MAX_ATTACHMENTS} 个文件。`,
         }
       : {
@@ -51,7 +53,7 @@ export function useAttachments({
           formatsTitle: 'Supported file formats',
           formatsSummary: 'Supports .pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
           formats: 'Supports PDF, Word, Excel, PowerPoint, CSV, TXT, Markdown and JSON.',
-          limits: `Up to ${MAX_ATTACHMENTS} files per question, ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB per file.`,
+          limits: `Up to ${MAX_ATTACHMENTS} files per question, ${fileSizeLabel(MAX_ATTACHMENT_BYTES)} per file.`,
           countError: `Add up to ${MAX_ATTACHMENTS} files per question.`,
         },
   );
@@ -87,9 +89,7 @@ export function useAttachments({
         const isOffice = /\.(docx|xlsx|pptx)$/i.test(file.name),
           isPdf = /\.pdf$/i.test(file.name);
         if (file.size > MAX_ATTACHMENT_BYTES) {
-          reject(
-            t('CM.COMMON.UPLOAD_FILE_SIZE', { size: `${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB` }),
-          );
+          reject(t('CM.COMMON.UPLOAD_FILE_SIZE', { size: fileSizeLabel(MAX_ATTACHMENT_BYTES) }));
           continue;
         }
         try {
@@ -121,7 +121,9 @@ export function useAttachments({
           ) {
             reject(
               t('CM.COMMON.UPLOAD_FILE_SIZE', {
-                size: `${size > MAX_ATTACHMENT_BYTES ? MAX_ATTACHMENT_BYTES / 1024 / 1024 : MAX_ATTACHMENT_TOTAL / 1024 / 1024} MB`,
+                size: fileSizeLabel(
+                  size > MAX_ATTACHMENT_BYTES ? MAX_ATTACHMENT_BYTES : MAX_ATTACHMENT_TOTAL,
+                ),
               }),
             );
             continue;
@@ -132,21 +134,20 @@ export function useAttachments({
           ];
           scheduleSave();
         } catch (error) {
-          reject(
-            error instanceof Error && error.message === 'ATTACHMENT_SIZE'
-              ? t('CM.COMMON.UPLOAD_FILE_SIZE', {
-                  size: `${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`,
-                })
-              : error instanceof Error && error.message === 'DOCUMENT_PAGES'
-                ? t('CM.COMMON.LENGTH', { min: 1, max: MAX_DOCUMENT_PAGES })
-                : // 读取失败不误报为“必须为 PDF 格式”：密码保护/损坏/资源加载失败均可能发生。
-                  // 复用语言包已有文案；本轮不新增密码输入或扫描识别入口。
-                  isPdf
-                  ? `${t('CM.COMMON.UPLOAD')} · ${t('AIAGENT.HISTORY.STATE.FAILED')}`
-                  : t('CM.COMMON.UPLOAD_FILE_FORMAT', {
-                      format: isOffice ? 'DOCX / XLSX / PPTX (Office Open XML)' : 'UTF-8',
-                    }),
-          );
+          if (error instanceof Error && error.message === 'ATTACHMENT_SIZE') {
+            reject(t('CM.COMMON.UPLOAD_FILE_SIZE', { size: fileSizeLabel(MAX_ATTACHMENT_BYTES) }));
+          } else if (error instanceof Error && error.message === 'DOCUMENT_PAGES') {
+            reject(t('CM.COMMON.LENGTH', { min: 1, max: MAX_DOCUMENT_PAGES }));
+          } else if (isPdf) {
+            // 加密、损坏或资源加载失败都可能使 PDF 无法读取。
+            reject(`${t('CM.COMMON.UPLOAD')} · ${t('AIAGENT.HISTORY.STATE.FAILED')}`);
+          } else {
+            reject(
+              t('CM.COMMON.UPLOAD_FILE_FORMAT', {
+                format: isOffice ? 'DOCX / XLSX / PPTX (Office Open XML)' : 'UTF-8',
+              }),
+            );
+          }
         }
       }
     } finally {

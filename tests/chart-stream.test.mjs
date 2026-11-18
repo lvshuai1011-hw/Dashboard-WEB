@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-
-// Exercise the same event and layout modules used by the page.
 const { outputFiles } = await build({
   stdin: {
     contents: `export { appendTextTurn, markFinalTurn, handleJsonEvent } from './src/views/ux/aiAgent/lib/streamEvents';

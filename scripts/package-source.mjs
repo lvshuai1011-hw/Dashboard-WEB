@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-// Package only a committed, reproducible revision. Never package node_modules or local runtime data.
+// 从已提交的版本打包，确保移植包能追溯到对应提交。
 const changes = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
   encoding: 'utf8',
 });
@@ -15,6 +15,7 @@ execFileSync(
     '--output=delivery/aiAgent-source.zip',
     'HEAD',
     'src',
+    'public',
     'stub',
     'tests',
     'scripts',

@@ -15,7 +15,7 @@ const HISTORY_ERROR_KEYS = new Set([
 
 function restoredStatus(value: unknown): 'completed' | 'error' | 'stopped' {
   if (value === 'completed' || value === 'error' || value === 'stopped') return value;
-  // A browser reload cannot resume an interrupted transport.
+  // 刷新后无法恢复原连接，历史中的运行状态转为中断。
   return 'stopped';
 }
 
@@ -49,7 +49,7 @@ function restoreProcess(record: JsonRecord, index: number, updatedAt: number): P
 
 function restoreFinalTurn(process: ProcessItem[]) {
   if (process.some((item) => item.isFinal)) return;
-  // Older histories omitted isFinal. Preserve their last text turn after the tools.
+  // 旧记录可能缺少 isFinal，需恢复工具步骤后的最后一轮正文。
   let firstAnswerIndex = 0;
   process.forEach((item, index) => {
     if (item.kind === 'tool' || item.kind === 'subagent') firstAnswerIndex = index + 1;
@@ -88,7 +88,7 @@ function restoreMessage(
   };
 }
 
-/** Restore only UI fields. Invalid rows are skipped; duplicate IDs cannot alias controls. */
+/** 仅恢复界面需要的字段，跳过无效记录并处理重复标识。 */
 export function decodeHistory(data: unknown, onInvalid: () => void = () => {}): Conversation[] {
   if (!Array.isArray(data)) throw new Error('INVALID_HISTORY');
   const usedIds = new Set<string>();

@@ -1,4 +1,4 @@
-// Built-in number-format identifiers in Office Open XML; custom patterns are checked separately.
+// 这些编号来自 Office Open XML 内置格式表，自定义格式另按模式识别。
 const BUILTIN_DATE_RANGES = [
   [14, 22],
   [27, 36],

@@ -3,5 +3,5 @@ dist
 package-lock.json
 delivery
 .openai
-# Keep short Less rules compact; long declarations remain on separate lines.
+# 样式允许简短规则单行排列。
 src/views/ux/aiAgent/styles/*.less
