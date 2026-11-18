@@ -34,6 +34,20 @@
           <el-dropdown-item command="rename" :icon="EditPen">
             {{ t('AIAGENT.HISTORY.RENAME') }}
           </el-dropdown-item>
+          <el-dropdown-item
+            command="pdf"
+            :icon="Download"
+            :disabled="exportBusy || !current.messages.length"
+          >
+            {{ uiCopy.exportPdf }}
+          </el-dropdown-item>
+          <el-dropdown-item
+            command="docx"
+            :icon="Download"
+            :disabled="exportBusy || !current.messages.length"
+          >
+            {{ uiCopy.exportWord }}
+          </el-dropdown-item>
           <el-dropdown-item command="delete" :icon="Delete" divided class="danger">
             {{ t('AIAGENT.HISTORY.DELETE') }}
           </el-dropdown-item>
@@ -44,12 +58,15 @@
 </template>
 
 <script setup lang="ts">
-import { Delete, EditPen, Star, StarFilled } from '@element-plus/icons-vue';
+import { Download, Delete, EditPen, Star, StarFilled } from '@element-plus/icons-vue';
 import { ChevronIcon } from '../lib/icons';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 import type { Conversation } from '../types';
+import type { useUiCopy } from '../composables/useUiCopy';
 defineProps<{
+  uiCopy: ReturnType<typeof useUiCopy>['value'];
+  exportBusy: boolean;
   current: Conversation;
   renaming: { id: string; where: string; value: string };
 }>();

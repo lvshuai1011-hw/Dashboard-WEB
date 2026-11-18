@@ -129,6 +129,20 @@
                 <el-dropdown-item command="rename" :icon="EditPen">
                   {{ t('AIAGENT.HISTORY.RENAME') }}
                 </el-dropdown-item>
+                <el-dropdown-item
+                  command="pdf"
+                  :icon="Download"
+                  :disabled="exportBusy || !chat.messages.length"
+                >
+                  {{ uiCopy.exportPdf }}
+                </el-dropdown-item>
+                <el-dropdown-item
+                  command="docx"
+                  :icon="Download"
+                  :disabled="exportBusy || !chat.messages.length"
+                >
+                  {{ uiCopy.exportWord }}
+                </el-dropdown-item>
                 <el-dropdown-item command="delete" :icon="Delete" divided class="danger">
                   {{ t('AIAGENT.HISTORY.DELETE') }}
                 </el-dropdown-item>
@@ -146,13 +160,22 @@
 
 <script setup lang="ts">
 import AppTooltip from './AppTooltip.vue';
-import { Close, Delete, EditPen, Search, Star, StarFilled } from '@element-plus/icons-vue';
+import {
+  Download,
+  Close,
+  Delete,
+  EditPen,
+  Search,
+  Star,
+  StarFilled,
+} from '@element-plus/icons-vue';
 import { PanelIcon, MoreIcon, BackIcon, NewChatIcon } from '../lib/icons';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 import type { ChatMessage, Conversation, ChatState } from '../types';
 import type { useUiCopy } from '../composables/useUiCopy';
 defineProps<{
+  exportBusy: boolean;
   activeId: string;
   searchMode: boolean;
   storageWarning: string;

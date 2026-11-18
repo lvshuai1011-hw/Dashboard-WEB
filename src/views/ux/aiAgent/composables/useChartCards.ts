@@ -1,3 +1,4 @@
+import { downloadName, saveBlob } from '../lib/download';
 import { nextTick, reactive, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { ChartContent, ChatMessage, ProcessItem, ComposerTranslation } from '../types';
@@ -71,27 +72,8 @@ export function useChartCards(
     ];
     saveBlob(
       new Blob([`\ufeff${rows.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }),
-      chartFileName(chart, 'csv'),
+      downloadName(chart.title, 'chart', 'csv'),
     );
-  }
-  function chartFileName(chart?: ChartContent, ext = 'png') {
-    const base =
-      (chart?.title || 'chart')
-        .replace(/[\\/:*?"<>|\r\n\t]+/g, '_')
-        .replace(/\s+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 80) || 'chart';
-    return `${base}.${ext}`;
-  }
-  function saveBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob),
-      link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
   function csvCell(value: unknown) {
     const text = value == null ? '' : String(value);
@@ -122,7 +104,7 @@ export function useChartCards(
     }
     const link = document.createElement('a');
     link.href = url;
-    link.download = chartFileName(chart);
+    link.download = downloadName(chart.title, 'chart', 'png');
     document.body.appendChild(link);
     link.click();
     link.remove();

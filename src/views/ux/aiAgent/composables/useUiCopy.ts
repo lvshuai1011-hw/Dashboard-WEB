@@ -5,6 +5,9 @@ export function useUiCopy(locale: Ref<string>) {
     locale.value.toLowerCase().startsWith('zh')
       ? {
           tryAsking: '试试这样问',
+          exportPdf: '下载为 PDF',
+          exportWord: '下载为 Word',
+          exportFailed: '导出会话失败，请重试。',
           fill: '填入',
           copy: '复制',
           back: '返回',
@@ -29,6 +32,9 @@ export function useUiCopy(locale: Ref<string>) {
         }
       : {
           tryAsking: 'Try asking',
+          exportPdf: 'Download as PDF',
+          exportWord: 'Download as Word',
+          exportFailed: 'Could not export this conversation. Please try again.',
           fill: 'Use',
           copy: 'Copy',
           back: 'Back',

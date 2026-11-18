@@ -8,6 +8,7 @@
     <div class="workspace">
       <!-- 侧栏：品牌、新建、搜索、按时间分组的历史会话 -->
       <ChatSidebar
+        :exportBusy="exportBusy"
         v-if="sidebarOpen"
         :activeId="activeId"
         :searchMode="searchMode"
@@ -63,6 +64,8 @@
 
         <!-- 顶栏：会话标题即菜单（收藏 / 重命名 / 删除） -->
         <ChatHeader
+          :exportBusy="exportBusy"
+          :uiCopy="uiCopy"
           v-if="messages.length"
           :current="current"
           :renaming="renaming"
@@ -167,6 +170,7 @@ import { useMessageActions } from './composables/useMessageActions';
 import { messageMatches, answerText } from './lib/messagePresentation';
 import { useUiCopy } from './composables/useUiCopy';
 import ChatSidebar from './components/ChatSidebar.vue';
+import { saveBlob, downloadName } from './lib/download';
 import ChatHeader from './components/ChatHeader.vue';
 import WelcomePage from './components/WelcomePage.vue';
 import MessageList from './components/MessageList.vue';
@@ -352,8 +356,28 @@ function showFollowUps(message: ChatMessage) {
     list[list.length - 1]?.id === message.id
   );
 }
+const exportBusy = ref(false);
+async function downloadConversation(chat: Conversation, format: 'pdf' | 'docx') {
+  if (exportBusy.value || !chat.messages.length) return;
+  exportBusy.value = true;
+  try {
+    const { conversationBlocks } = await import('./lib/export/content');
+    const blocks = conversationBlocks(chat, t, locale.value.startsWith('zh'));
+    const name = downloadName(chat.title, 'conversation', format);
+    const file =
+      format === 'pdf'
+        ? await (await import('./lib/export/pdf')).pdfFile(blocks)
+        : await (await import('./lib/export/word')).wordFile(blocks);
+    saveBlob(file, name);
+  } catch {
+    ElMessage.error(uiCopy.value.exportFailed);
+  } finally {
+    exportBusy.value = false;
+  }
+}
 function onChatCommand(chat: Conversation, command: string, where: 'side' | 'header' = 'side') {
-  if (command === 'favorite') toggleFavorite(chat);
+  if (command === 'pdf' || command === 'docx') void downloadConversation(chat, command);
+  else if (command === 'favorite') toggleFavorite(chat);
   else if (command === 'rename') renameConversation(chat, where);
   else if (command === 'delete') deleteConversation(chat);
 }
