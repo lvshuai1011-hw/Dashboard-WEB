@@ -5,7 +5,7 @@
       :class="{ 'is-streaming': streaming }"
       @paste="(event) => emit('onAttachmentPaste', event)"
     >
-      <!-- DOCX / XLSX / PDF / PPTX 在本地提取文本；仍通过现有 message.content 发送，无新增上传接口。 -->
+      <!-- DOCX / XLSX / PPTX 在本地提取文本；仍通过现有 message.content 发送，无新增上传接口。 -->
       <input
         :ref="bindFileInput"
         hidden

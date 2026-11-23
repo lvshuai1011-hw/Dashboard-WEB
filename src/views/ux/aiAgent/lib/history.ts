@@ -82,7 +82,7 @@ function restoreMessage(
         : undefined,
     errorKey: HISTORY_ERROR_KEYS.has(String(record.errorKey)) ? String(record.errorKey) : undefined,
     errorDetail: textValue(record.errorDetail),
-    attachments: record.role === 'user' ? readAttachments(record.attachments) : [],
+    attachments: record.role === 'user' ? readAttachments(record.attachments, true) : [],
     followUps: record.role === 'assistant' ? readFollowUps(record.followUps) : undefined,
     process,
   };

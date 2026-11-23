@@ -5,6 +5,7 @@ import less from 'less';
 import { loadSource } from './load-source.mjs';
 
 const source = await loadSource(`
+  export { validAttachmentName, readAttachments } from './src/views/ux/aiAgent/lib/attachmentMetadata';
   export { messageMatches, messageSearchValues } from './src/views/ux/aiAgent/lib/messagePresentation';
   export { useProcessTimeline } from './src/views/ux/aiAgent/composables/useProcessTimeline';
   export { renderMarkdown } from './src/views/ux/aiAgent/lib/markdown';
@@ -196,4 +197,14 @@ test('代码着色区分语言注释、字符串、关键字和数字', () => {
     source.renderMarkdown('```sql\nSELECT 42 --合计\n```', translate),
     /class="tok-n">42</,
   );
+});
+
+test('retired PDF attachments remain readable only in sent history', () => {
+  const file = { name: 'invoice.PDF', content: 'saved text' };
+  assert.equal(source.validAttachmentName(file.name), false);
+  assert.deepEqual(source.readAttachments([file]), []);
+  assert.equal(source.readAttachments([file], true)[0].content, file.content);
+  for (const extension of ['docx', 'xlsx', 'pptx', 'csv', 'txt']) {
+    assert.equal(source.validAttachmentName('invoice.' + extension), true);
+  }
 });

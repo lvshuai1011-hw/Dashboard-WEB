@@ -11,18 +11,22 @@ import { uid } from './identity';
 export function validAttachmentName(name: string) {
   return ATTACHMENT_ACCEPT.split(',').some((ext) => name.toLowerCase().endsWith(ext));
 }
-export function readAttachments(value: unknown): TextAttachment[] {
+export function readAttachments(value: unknown, sentMessage = false): TextAttachment[] {
   if (!Array.isArray(value)) return [];
   const result: TextAttachment[] = [];
   let total = 0;
   for (const file of value) {
     if (result.length >= MAX_ATTACHMENTS) break;
-    // 停止接收新 TSV，但已保存的历史附件仍可阅读，避免升级后丢失原内容。
+    // 已发送消息可恢复旧附件的文本快照。
     if (
       !isRecord(file) ||
       typeof file.name !== 'string' ||
       typeof file.content !== 'string' ||
-      !(validAttachmentName(file.name) || /\.tsv$/i.test(file.name))
+      !(
+        validAttachmentName(file.name) ||
+        /\.tsv$/i.test(file.name) ||
+        (sentMessage && /\.pdf$/i.test(file.name))
+      )
     )
       continue;
     if (

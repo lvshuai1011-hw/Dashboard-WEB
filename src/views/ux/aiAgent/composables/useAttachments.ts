@@ -1,5 +1,5 @@
 import { computed, reactive, ref, type Ref } from 'vue';
-import { readPdfFile, readOfficeFile, validAttachmentName } from '../lib/attachmentReaders';
+import { readOfficeFile, validAttachmentName } from '../lib/attachmentReaders';
 import { uid } from '../lib/identity';
 import {
   ATTACHMENT_ACCEPT,
@@ -43,16 +43,16 @@ export function useAttachments({
       ? {
           add: '添加附件',
           formatsTitle: '支持的文件格式',
-          formatsSummary: '支持 .pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
-          formats: '支持 PDF/Word/Excel/PowerPoint/CSV/TXT/Markdown/JSON',
+          formatsSummary: '支持 .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
+          formats: '支持 Word/Excel/PowerPoint/CSV/TXT/Markdown/JSON',
           limits: `每条问题最多添加 ${MAX_ATTACHMENTS} 个文件，每个文件不超过 ${fileSizeLabel(MAX_ATTACHMENT_BYTES)}。`,
           countError: `每条问题最多添加 ${MAX_ATTACHMENTS} 个文件。`,
         }
       : {
           add: 'Add attachments',
           formatsTitle: 'Supported file formats',
-          formatsSummary: 'Supports .pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
-          formats: 'Supports PDF, Word, Excel, PowerPoint, CSV, TXT, Markdown and JSON.',
+          formatsSummary: 'Supports .docx / .xlsx / .pptx / .csv / .txt / .md / .json',
+          formats: 'Supports Word, Excel, PowerPoint, CSV, TXT, Markdown and JSON.',
           limits: `Up to ${MAX_ATTACHMENTS} files per question, ${fileSizeLabel(MAX_ATTACHMENT_BYTES)} per file.`,
           countError: `Add up to ${MAX_ATTACHMENTS} files per question.`,
         },
@@ -86,21 +86,18 @@ export function useAttachments({
           reject(t('SYS.VALIDATOR.FILE_EMPTY'));
           continue;
         }
-        const isOffice = /\.(docx|xlsx|pptx)$/i.test(file.name),
-          isPdf = /\.pdf$/i.test(file.name);
+        const isOffice = /\.(docx|xlsx|pptx)$/i.test(file.name);
         if (file.size > MAX_ATTACHMENT_BYTES) {
           reject(t('CM.COMMON.UPLOAD_FILE_SIZE', { size: fileSizeLabel(MAX_ATTACHMENT_BYTES) }));
           continue;
         }
         try {
-          const content = isPdf
-            ? await readPdfFile(file)
-            : isOffice
-              ? await readOfficeFile(file)
-              : new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+          const content = isOffice
+            ? await readOfficeFile(file)
+            : new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
           if (isDisposed() || !conversations.value.includes(chat)) break;
           if (!content.trim()) {
-            reject(t(isOffice || isPdf ? 'AIAGENT.CHART.NO_DATA' : 'SYS.VALIDATOR.FILE_EMPTY'));
+            reject(t(isOffice ? 'AIAGENT.CHART.NO_DATA' : 'SYS.VALIDATOR.FILE_EMPTY'));
             continue;
           }
           if (content.includes('\0')) {
@@ -138,9 +135,6 @@ export function useAttachments({
             reject(t('CM.COMMON.UPLOAD_FILE_SIZE', { size: fileSizeLabel(MAX_ATTACHMENT_BYTES) }));
           } else if (error instanceof Error && error.message === 'DOCUMENT_PAGES') {
             reject(t('CM.COMMON.LENGTH', { min: 1, max: MAX_DOCUMENT_PAGES }));
-          } else if (isPdf) {
-            // 加密、损坏或资源加载失败都可能使 PDF 无法读取。
-            reject(`${t('CM.COMMON.UPLOAD')} · ${t('AIAGENT.HISTORY.STATE.FAILED')}`);
           } else {
             reject(
               t('CM.COMMON.UPLOAD_FILE_FORMAT', {

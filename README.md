@@ -14,6 +14,10 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 
 ## 更新日志
 
+### 2026-11-23
+
+- 移除 PDF 附件上传和解析依赖；已发送消息仍可查看原有附件文本。
+
 ### 2026-11-18
 
 - 静态图标、欢迎页趋势图和标签页图标改为独立 SVG，源码包包含对应资源。新增检查防止将绘图路径粘回业务源码。
@@ -38,7 +42,7 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 
 ## 移植问结算助手
 
-保留现有页面入口 `src/views/ux/aiAgent.vue`，它加载同级 `aiAgent/App.vue`。移植时一起合并 `aiAgent/` 目录及该入口。宿主继续提供 Vue 3.5、Element Plus、ECharts、lodash-es、pdfjs-dist、i18n 语言包和 `~/store` 的登录接口。Site 演示使用模拟传输，真实门户沿用既有 SSE 接口。
+保留现有页面入口 `src/views/ux/aiAgent.vue`，它加载同级 `aiAgent/App.vue`。移植时一起合并 `aiAgent/` 目录及该入口。宿主继续提供 Vue 3.5、Element Plus、ECharts、lodash-es、i18n 语言包和 `~/store` 的登录接口。Site 演示使用模拟传输，真实门户沿用既有 SSE 接口。
 
 下表的行号以拆分前的 GitHub 提交 `4a6021d` 为准。
 
@@ -47,7 +51,7 @@ Vue 3 AI 对话与图表页面（仅网页端），包含中英文界面、执�
 | 模板 1–280 的页面骨架，脚本 281–2427 的组装和生命周期 | `App.vue` |
 | 365–432 的类型和协议常量，以及各处的附件、并发、追问限制 | `types.ts` |
 | 433–554 的记录判断、分帧和 HTTP 传输 | `lib/sse.ts`，记录判断由 `lib/records.ts` 提供并从 SSE 模块导出 |
-| 566–902 的 PDF 资源、附件提取、历史附件恢复和请求正文拼接 | `lib/attachmentReaders.ts` |
+| 566–902 的附件提取、历史附件恢复和请求正文拼接 | `lib/attachmentReaders.ts` |
 | 310–348、352–364 的自定义图标 | `lib/icons.ts` |
 | 903–1015 的历史与选中会话、1341–1346 的持久化及 1353–1403 的会话操作 | `composables/useConversations.ts`，ID 与历史字段转换在 `lib/identity.ts` |
 | 1882–2098 的流事件与发送流程、1404–1466 的过程推进和正文分流 | `composables/useChatStream.ts`、`useRunningRequests.ts`、`lib/streamEvents.ts`、`lib/messageLayout.ts` |
@@ -155,9 +159,9 @@ server {
 
 ## 生产集成
 
-页面入口为 `src/views/ux/aiAgent.vue`，必须连同 `src/views/ux/aiAgent/` 整个目录集成到原门户；`stub/` 和 `src/demo-transport.js` 仅用于独立预览。PDF 解析依赖 `pdfjs-dist`，版本见 package.json。
+页面入口为 `src/views/ux/aiAgent.vue`，必须连同 `src/views/ux/aiAgent/` 整个目录集成到原门户；`stub/` 和 `src/demo-transport.js` 仅用于独立预览。
 
-附件提示支持中英文，悬停显示 `.pdf / .docx / .xlsx / .pptx / .csv / .txt / .md / .json`。每条问题最多 5 个文件，每个不超过 5 MiB；不支持旧版 DOC/XLS 或图片识别。
+附件提示支持中英文，悬停显示 `.docx / .xlsx / .pptx / .csv / .txt / .md / .json`。每条问题最多 5 个文件，每个不超过 5 MiB；不支持旧版 DOC/XLS 或图片识别。
 
 ## 代码检查与交付
 
@@ -176,7 +180,7 @@ npm run package:source
 `package:source` 从当前 **已提交的 HEAD** 生成 `delivery/aiAgent-source.zip`，包含完整模块、预览工程与文档；执行前请先提交改动。生成包不纳入 Git，避免再次与源码脱节。
 
 当前审查范围与修改依据见 [代码审查记录](docs/code-review-2026-11-16.md)。
-PDF 仅提取文本层；Office 仅支持 OOXML。真实接口、企业语言包和登录态仍需移植方联调。
+Office 仅支持 OOXML。真实接口、企业语言包和登录态仍需移植方联调。
 本页面按单个应用实例设计；会话和运行请求为模块级共享状态，同一页面不要同时挂载两份 App。
 
 ### 2026-11-17：精简与浅色浮窗

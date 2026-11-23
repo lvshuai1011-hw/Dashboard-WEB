@@ -1,3 +1,4 @@
+import { readAttachments } from '../lib/attachmentMetadata';
 import { computed, nextTick, reactive, type Ref } from 'vue';
 import type { InputInstance } from 'element-plus';
 import type { ChatMessage, Conversation, TextAttachment } from '../types';
@@ -40,7 +41,7 @@ export function useQuestionEditor(options: {
       draft: prior?.draft ?? draft.value,
       attachments: prior?.attachments ?? draftAttachments.value.map((file) => ({ ...file })),
     });
-    current.value.attachments = (question.attachments || []).map((file) => ({ ...file }));
+    current.value.attachments = readAttachments(question.attachments);
     draft.value = question.content;
     void nextTick(() => inputRef.value?.focus());
   }

@@ -140,7 +140,7 @@ export const MAX_ATTACHMENTS = 5;
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_ATTACHMENT_TOTAL = MAX_ATTACHMENTS * MAX_ATTACHMENT_BYTES;
 export const ATTACHMENT_ACCEPT =
-  '.pdf,.pptx,.docx,.xlsx,.txt,.md,.markdown,.csv,.json,.log,.yaml,.yml,.xml,.sql,.js,.ts,.py,.java,.c,.cpp,.h,.html,.css';
+  '.pptx,.docx,.xlsx,.txt,.md,.markdown,.csv,.json,.log,.yaml,.yml,.xml,.sql,.js,.ts,.py,.java,.c,.cpp,.h,.html,.css';
 // 本地 OOXML 文本提取，不引入依赖：浏览器 ZIP/DEFLATE + XML DOM。
 // DOCX：正文段落、表格；XLSX：全部工作表、共享字符串、日期、百分比、公式缓存值。
 // PPTX 复用同一解析器；不执行宏/公式/外部关系，不支持旧版 DOC/XLS 与扫描图片。
