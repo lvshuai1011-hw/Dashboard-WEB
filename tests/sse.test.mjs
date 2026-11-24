@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadSource } from './load-source.mjs';
-const { createSseParser, chatStream } = await loadSource(
-  `export { createSseParser, chatStream } from './src/views/ux/aiAgent/lib/sse'`,
+const { createSseParser, chatStream, applyAgentEvent, layout, makeMessage } = await loadSource(
+  `export { createSseParser, chatStream } from './src/views/ux/aiAgent/lib/sse';
+   export { applyAgentEvent, makeMessage } from './src/views/ux/aiAgent/lib/streamEvents';
+   export { layout } from './src/views/ux/aiAgent/lib/messageLayout';`,
   {
     plugins: [
       {
@@ -94,4 +96,40 @@ test('cancelling before response headers suppresses callbacks', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('a fenced chart followed by repeated finish frames is a complete chart-only reply', () => {
+  const chart = { chart_type: 'bar', title: 'Example', summary: 'Sample total', series: [] };
+  const frames = [
+    { event: 'answer', messageId: 'plan', content: 'Plan' },
+    { event: 'heartbeat' },
+    { event: 'answer', messageId: 'plan', content: 'ning' },
+    { event: 'answer', messageId: 'query', content: 'Querying' },
+    { event: 'json', messageId: 'result', content: '```json\n' + JSON.stringify(chart) + '\n```' },
+    { event: 'finish_stop', messageId: 'result' },
+    { event: 'finish_stop', messageId: 'result' },
+  ];
+  const message = makeMessage('assistant', '');
+  const parse = createSseParser((event) => {
+    if (applyAgentEvent(message, event) === 'done') message.status = 'completed';
+  });
+  for (const inner of frames) {
+    parse(
+      'data:' +
+        JSON.stringify({ event: 'ExecuteAgentNormal', data: JSON.stringify(inner) }) +
+        '\n\n',
+    );
+  }
+  const { timeline, body } = layout(message);
+  assert.deepEqual(
+    timeline.map((p) => p.text),
+    ['Planning', 'Querying'],
+  );
+  assert.deepEqual(
+    body.map((p) => p.kind),
+    ['chart'],
+  );
+  assert.equal(body[0].chart.summary, chart.summary);
+  assert.equal(message.status, 'completed');
+  assert.equal(message.followUps, undefined);
 });

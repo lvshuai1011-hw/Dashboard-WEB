@@ -55,9 +55,6 @@
       </AppTooltip>
     </div>
     <div class="result-body">
-      <p v-if="item.chart?.summary" class="result-summary">
-        {{ item.chart.summary }}
-      </p>
       <template v-if="chartHasData(item.chart)">
         <ChartView
           v-if="item.chart?.chart_type !== 'table'"
@@ -95,6 +92,9 @@
       </template>
       <p v-else class="result-empty">
         {{ t('AIAGENT.CHART.NO_DATA') }}
+      </p>
+      <p v-if="item.chart?.summary" class="result-summary">
+        {{ item.chart.summary }}
       </p>
     </div>
     <div v-if="item.chart?.total != null" class="result-foot">

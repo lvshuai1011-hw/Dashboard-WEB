@@ -100,41 +100,83 @@ window.fetch = async (input, init = {}) => {
           : ['预付费', '后付费', '混合'];
       const values = line ? [72000, 81000, 79000, 93000, 110000, 125000] : [125000, 98000, 43000];
       const title = english ? 'Sample billing revenue' : '计费收入（演示数据）';
+      // 柱状图示例覆盖只有图表总结、没有后续正文或追问的响应。
+      const chartOnly =
+        !files.length && !textOnly && !line && !pie && !table && /柱状图|bar chart/i.test(prompt);
+      if (chartOnly) {
+        for (const [i, skill] of ['query-execute', 'render-chart'].entries()) {
+          const start = 1800 + i * 500;
+          at(start, () =>
+            emit({
+              event: 'answer',
+              content: english ? 'Preparing sample results.' : '正在整理示例结果。',
+              messageId: skill,
+            }),
+          );
+          for (const [delay, status] of [
+            [50, 'running'],
+            [150, 'completed'],
+          ]) {
+            at(start + delay, () =>
+              emit({
+                event: 'tool',
+                content: skill,
+                metadata: {
+                  toolName: 'skill',
+                  callId: skill,
+                  status,
+                  ...(status === 'completed' ? { duration: 100 } : {}),
+                },
+              }),
+            );
+          }
+        }
+      }
       if (!textOnly)
-        at(3000, () =>
+        at(3000, () => {
+          const content = JSON.stringify(
+            table
+              ? {
+                  chart_type: 'table',
+                  title,
+                  summary: english
+                    ? 'Sample records for interaction testing.'
+                    : '以下为交互测试用模拟记录。',
+                  table_data: {
+                    headers: english ? ['Type', 'Revenue'] : ['类型', '收入'],
+                    rows: labels.map((v, i) => [v, values[i]]),
+                  },
+                  total: labels.length,
+                }
+              : {
+                  chart_type: line ? 'line' : pie ? 'pie' : 'bar',
+                  title,
+                  summary: english
+                    ? 'Synthetic figures; no company data is queried.'
+                    : '模拟数值，不代表真实业务结果。',
+                  series: [
+                    {
+                      name: english ? 'Revenue' : '收入',
+                      data: labels.map((x, i) => ({ x, y: values[i] })),
+                    },
+                  ],
+                },
+          );
           emit({
             event: 'json',
             messageId: 'chart',
-            content: JSON.stringify(
-              table
-                ? {
-                    chart_type: 'table',
-                    title,
-                    summary: english
-                      ? 'Sample records for interaction testing.'
-                      : '以下为交互测试用模拟记录。',
-                    table_data: {
-                      headers: english ? ['Type', 'Revenue'] : ['类型', '收入'],
-                      rows: labels.map((v, i) => [v, values[i]]),
-                    },
-                    total: labels.length,
-                  }
-                : {
-                    chart_type: line ? 'line' : pie ? 'pie' : 'bar',
-                    title,
-                    summary: english
-                      ? 'Synthetic figures; no company data is queried.'
-                      : '模拟数值，不代表真实业务结果。',
-                    series: [
-                      {
-                        name: english ? 'Revenue' : '收入',
-                        data: labels.map((x, i) => ({ x, y: values[i] })),
-                      },
-                    ],
-                  },
-            ),
-          }),
-        );
+            content: chartOnly ? '```json\n' + content + '\n```' : content,
+          });
+        });
+      if (chartOnly) {
+        at(3400, () => emit({ event: 'finish_stop', messageId: 'chart' }));
+        at(3500, () => emit({ event: 'finish_stop', messageId: 'chart' }));
+        at(3600, () => {
+          stop();
+          controller.close();
+        });
+        return;
+      }
       let answer = english
         ? `**Prepaid revenue is the largest share, at about 47%**, followed by postpaid.\n\nThis is a **UI test response** for your question. The page uses synthetic billing data. You can test copying, regenerating, editing, downloading, and stopping.\n\n- Prepaid: 125,000\n- Postpaid: 98,000\n- Hybrid: 43,000`
         : `**预付费收入占比最高，约为 47%**，后付费次之，混合计费最少。\n\n这是针对本次提问的 **界面测试答复**，本页使用模拟计费数据，不进行真实业务查询。你可以验证复制、重新生成、重新编辑、下载及停止操作。\n\n- 预付费收入：125,000\n- 后付费收入：98,000\n- 混合计费收入：43,000`;
