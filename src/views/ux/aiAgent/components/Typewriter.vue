@@ -21,6 +21,7 @@ const { t } = useI18n();
 const props = defineProps<{
   content: string;
   active?: boolean;
+  revealOnMount?: boolean;
   highlight?: boolean;
   sweep?: boolean;
   reducedMotion: boolean;
@@ -36,14 +37,14 @@ const clear = () => {
 };
 const pump = () => {
   timer = undefined;
-  const chunk = typingChunk(pending);
+  const chunk = typingChunk(pending) || (props.revealOnMount ? pending : '');
   displayed.value += chunk;
   pending = pending.slice(chunk.length);
   emit('progress');
   if (pending && chunk) timer = setTimeout(pump, 30);
 };
 watch(
-  () => [props.content, props.active, props.reducedMotion] as const,
+  () => [props.content, props.active || props.revealOnMount, props.reducedMotion] as const,
   ([content, active, reduced]) => {
     if (!active || reduced) {
       clear();
@@ -169,7 +170,7 @@ const fadeIn = () => {
     total += node.data.length;
   }
   const now = performance.now();
-  if (props.active && !props.reducedMotion && total > shownLength)
+  if ((props.active || props.revealOnMount) && !props.reducedMotion && total > shownLength)
     reveals.push({ from: shownLength, at: now });
   shownLength = total;
   reveals = reveals.filter((item) => now - item.at < FADE_MS && item.from < total);

@@ -84,6 +84,16 @@
           :item="item"
           :uiCopy="uiCopy"
         />
+        <div v-if="item.kind === 'chart' && item.chart?.summary" class="result-summary">
+          <strong>{{ uiCopy.chartSummary }}</strong>
+          <Typewriter
+            :content="item.chart.summary"
+            :reveal-on-mount="!existingChartIds.has(item.id)"
+            :reduced-motion="reducedMotion"
+            @progress="emit('scheduleScroll')"
+            @copy-code="(event) => emit('copyCode', event)"
+          />
+        </div>
       </div>
       <p v-if="message.status === 'completed' && !hasAnswer" class="note">
         {{ t('AIAGENT.STATUS.NO_ANSWER') }}
@@ -201,6 +211,10 @@ const { t } = useI18n();
 import type { ChatMessage, TextAttachment } from '../types';
 import type { MessageItemProps } from '../componentTypes';
 const props = defineProps<MessageItemProps>();
+// 挂载时已有的图表直接显示，只为本次新到达的图表播放摘要。
+const existingChartIds = new Set(
+  props.message.process.filter((item) => item.kind === 'chart').map((item) => item.id),
+);
 const messageLayout = computed(() => layout(props.message));
 const hasAnswer = computed(() => bodyEntries(props.message, messageLayout.value.body).length > 0);
 const highlightPart = computed(
