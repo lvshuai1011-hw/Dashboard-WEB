@@ -150,6 +150,7 @@ export function applyAgentEvent(
         );
         if (status === 'completed') {
           if (item) {
+            item.input = JSON.stringify(meta, null, 2);
             const duration = meta.duration;
             if (typeof duration === 'number' && Number.isFinite(duration)) item.duration = duration;
             closeProcess(item);

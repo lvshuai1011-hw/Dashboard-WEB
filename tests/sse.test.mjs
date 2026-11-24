@@ -133,3 +133,25 @@ test('a fenced chart followed by repeated finish frames is a complete chart-only
   assert.equal(message.status, 'completed');
   assert.equal(message.followUps, undefined);
 });
+
+test('records every complete SSE payload in order before interpreting its fields', () => {
+  const captured = [];
+  const parse = createSseParser(
+    () => {},
+    (payload) => captured.push(payload),
+  );
+  const frames = [
+    JSON.stringify({
+      event: 'ExecuteAgentNormal',
+      agentCode: 'demo',
+      data: JSON.stringify({ event: 'heartbeat' }),
+    }),
+    '{"event":"future-event","extra":{"a":1}}',
+    'invalid-json',
+    '{"event":"end"}',
+    '{"event":"end"}',
+  ];
+  const wire = frames.map((p) => 'data:' + p + '\r\n\r\n').join('');
+  for (let i = 0; i < wire.length; i += 3) parse(wire.slice(i, i + 3));
+  assert.deepEqual(captured, frames);
+});

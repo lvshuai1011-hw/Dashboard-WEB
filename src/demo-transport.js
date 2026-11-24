@@ -1,9 +1,13 @@
 // 仅在线预览使用：组件仍调用原接口并走完整 SSE 解析；此模块在浏览器内模拟响应，不接入公司环境。
+import { createLocalReplay } from './demo-replay';
+const localReplay =
+  new URLSearchParams(location.search).get('replay') === '1' ? createLocalReplay() : undefined;
 const originalFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   if (!url.endsWith('/vds/webapi/ai/aiagent/v1/conversations')) return originalFetch(input, init);
   if (init.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  if (localReplay) return localReplay(init.signal);
   const body = JSON.parse(init.body || '{}');
   const prompt = body.message?.content || '';
   const attachmentMatch = /\n\n<attached_files format="json">\n([\s\S]*)\n<\/attached_files>$/.exec(

@@ -80,6 +80,8 @@ export interface ChatMessage {
   lastSignalAt?: number;
   // 记录本轮接收的流量。
   streamBytes?: number;
+  // 按接收顺序保存 SSE data 载荷，包括心跳、结束帧和未知事件。
+  streamPayloads?: string[];
   // 模型在答复结束前通过 json 事件下发的追问建议（最多 3 条）。
   followUps?: string[];
 }

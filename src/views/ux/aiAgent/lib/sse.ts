@@ -5,13 +5,17 @@ import { isRecord } from './records';
 export { isRecord } from './records';
 
 // 增量按行切分，兼容 LF、CRLF、CR；跨 chunk 的半行和半帧继续保留。
-export function createSseParser(onEvent: (event: StreamEvent) => void) {
+export function createSseParser(
+  onEvent: (event: StreamEvent) => void,
+  onPayload?: (payload: string) => void,
+) {
   let buffer = '';
   let dataLines: string[] = [];
   const dispatch = () => {
     const payload = dataLines.join('\n');
     dataLines = [];
     if (!payload.trim()) return;
+    onPayload?.(payload);
     let outer: unknown;
     try {
       outer = JSON.parse(payload);
@@ -64,6 +68,7 @@ export function chatStream(
   onEvent: (event: StreamEvent) => void,
   onError: (error: unknown) => void,
   onComplete: () => void,
+  onPayload?: (payload: string) => void,
 ): () => void {
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -98,7 +103,7 @@ export function chatStream(
     )
       receivedEndEvent = true;
     onEvent(event);
-  });
+  }, onPayload);
   touch(); // 包括等待响应头期间；每次收到实际字节后重置。
   void (async () => {
     try {

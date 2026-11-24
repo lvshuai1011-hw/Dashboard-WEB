@@ -77,7 +77,6 @@ export function useChatStream(options: {
         persistHistory();
         scheduleScroll();
       }
-      endTail(message.id);
     } catch {
       /* 非 JSON，忽略 */
     }
@@ -170,6 +169,7 @@ export function useChatStream(options: {
         transportAbort?.();
       },
     });
+    message.streamPayloads = [];
     transportAbort = chatStream(
       {
         conversationId: chat.conversationId,
@@ -216,6 +216,11 @@ export function useChatStream(options: {
       () => {
         endTail(message.id);
         if (!options.isDisposed()) finishRequest(message.id, message, 'completed');
+      },
+      (payload) => {
+        if (options.isDisposed()) return;
+        message.streamPayloads!.push(payload);
+        scheduleSave();
       },
     );
     if (cancellationRequested) transportAbort();
