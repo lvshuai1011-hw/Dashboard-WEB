@@ -7,7 +7,10 @@
   >
     <!-- 用户提问 -->
     <template v-if="message.role === 'user'">
-      <AppTooltip :content="formatTime(message.createdAt)">
+      <div class="question-group">
+        <time class="question-time" :datetime="new Date(message.createdAt).toISOString()">
+          {{ formatTime(message.createdAt) }}
+        </time>
         <div class="question">
           <p class="question-text">{{ message.content }}</p>
           <div v-if="message.attachments?.length" class="sent-attachments">
@@ -19,7 +22,7 @@
             </AppTooltip>
           </div>
         </div>
-      </AppTooltip>
+      </div>
       <div class="question-actions">
         <AppTooltip
           :content="copiedMessageId === message.id ? t('AIAGENT.COPY.SUCCESS') : uiCopy.copy"
