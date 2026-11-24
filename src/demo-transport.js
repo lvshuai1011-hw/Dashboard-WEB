@@ -136,6 +136,13 @@ window.fetch = async (input, init = {}) => {
           }
         }
       }
+      const summary = line
+        ? english
+          ? 'Revenue rose from 72,000 in January to 125,000 in June, with a dip in March.'
+          : '收入从 1 月的 72,000 增至 6 月的 125,000，其中 3 月较上月小幅回落。'
+        : english
+          ? 'Prepaid revenue was 125,000, about 47% of the total, ahead of postpaid (98,000) and hybrid (43,000).'
+          : '预付费收入为 125,000，占总收入约 47%，高于后付费（98,000）和混合计费（43,000）。';
       if (!textOnly)
         at(3000, () => {
           const content = JSON.stringify(
@@ -143,9 +150,7 @@ window.fetch = async (input, init = {}) => {
               ? {
                   chart_type: 'table',
                   title,
-                  summary: english
-                    ? 'Sample records for interaction testing.'
-                    : '以下为交互测试用模拟记录。',
+                  summary,
                   table_data: {
                     headers: english ? ['Type', 'Revenue'] : ['类型', '收入'],
                     rows: labels.map((v, i) => [v, values[i]]),
@@ -155,9 +160,7 @@ window.fetch = async (input, init = {}) => {
               : {
                   chart_type: line ? 'line' : pie ? 'pie' : 'bar',
                   title,
-                  summary: english
-                    ? 'Synthetic figures; no company data is queried.'
-                    : '模拟数值，不代表真实业务结果。',
+                  summary,
                   series: [
                     {
                       name: english ? 'Revenue' : '收入',

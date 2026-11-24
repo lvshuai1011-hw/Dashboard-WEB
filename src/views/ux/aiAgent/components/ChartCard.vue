@@ -93,9 +93,10 @@
       <p v-else class="result-empty">
         {{ t('AIAGENT.CHART.NO_DATA') }}
       </p>
-      <p v-if="item.chart?.summary" class="result-summary">
-        {{ item.chart.summary }}
-      </p>
+      <div v-if="item.chart?.summary" class="result-summary">
+        <strong>{{ uiCopy.chartSummary }}</strong>
+        <p>{{ item.chart.summary }}</p>
+      </div>
     </div>
     <div v-if="item.chart?.total != null" class="result-foot">
       {{
